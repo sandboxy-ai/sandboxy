@@ -1,0 +1,18 @@
+id: "sandboxy.tools.mock_shopify"
+name: "Mock Shopify"
+type: "mock_shopify"
+description: "Mock Shopify store for orders, refunds, and customer management."
+impl:
+  module: "sandboxy.tools.mock_shopify:MockShopifyTool"
+
+actions:
+  - name: get_order
+    description: Get details of an order by ID
+  - name: refund_order
+    description: Process a refund for an order
+  - name: list_orders
+    description: List orders with optional filters
+  - name: get_customer
+    description: Get customer details
+  - name: update_order_status
+    description: Update the status of an order

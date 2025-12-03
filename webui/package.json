@@ -1,0 +1,17 @@
+{
+  "name": "sandboxy-webui",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Minimal web UI for Sandboxy",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

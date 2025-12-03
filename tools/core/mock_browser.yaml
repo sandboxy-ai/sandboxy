@@ -1,0 +1,18 @@
+id: "sandboxy.tools.mock_browser"
+name: "Mock Browser"
+type: "mock_browser"
+description: "Mock browser with canned pages for testing web browsing scenarios."
+impl:
+  module: "sandboxy.tools.mock_browser:MockBrowserTool"
+
+actions:
+  - name: open
+    description: Open a URL and return its content
+  - name: get_content
+    description: Get the content of the current page
+  - name: search
+    description: Search for text within available pages
+  - name: back
+    description: Go back to the previous page
+  - name: get_current_url
+    description: Get the currently open URL

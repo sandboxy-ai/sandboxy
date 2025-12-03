@@ -1,0 +1,20 @@
+id: "sandboxy.tools.mock_email"
+name: "Mock Email"
+type: "mock_email"
+description: "Mock email service for testing email scenarios."
+impl:
+  module: "sandboxy.tools.mock_email:MockEmailTool"
+
+actions:
+  - name: send
+    description: Send an email
+  - name: list_inbox
+    description: List emails in inbox
+  - name: read
+    description: Read a specific email by ID
+  - name: save_draft
+    description: Save an email as draft
+  - name: list_sent
+    description: List sent emails
+  - name: search
+    description: Search emails by content

@@ -1,0 +1,10 @@
+id: "gpt5-nano"
+name: "GPT-5 Nano"
+kind: "llm-prompt"
+model: "gpt-5-nano"
+system_prompt: |
+  You are a helpful assistant. Use the available tools to complete tasks.
+tools: []
+params:
+  max_tokens: 512
+impl: {}

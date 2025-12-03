@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sandboxy</title>
+  <style>
+    :root {
+      --bg-primary: #0b1020;
+      --bg-secondary: #111525;
+      --bg-tertiary: #1a1f35;
+      --text-primary: #f5f5ff;
+      --text-secondary: #a0a0b0;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --success: #22c55e;
+      --error: #ef4444;
+      --border: #2a2f45;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 600;
+    }
+
+    h2 {
+      font-size: 1.25rem;
+      font-weight: 500;
+      margin-bottom: 1rem;
+      color: var(--text-secondary);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+    }
+
+    @media (max-width: 768px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      padding: 1.5rem;
+      border: 1px solid var(--border);
+    }
+
+    .module-item, .agent-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem;
+      margin-bottom: 0.5rem;
+      background: var(--bg-tertiary);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    .module-item:hover, .agent-item:hover {
+      border-color: var(--accent);
+    }
+
+    .module-info, .agent-info {
+      flex: 1;
+    }
+
+    .module-name, .agent-name {
+      font-weight: 500;
+      margin-bottom: 0.25rem;
+    }
+
+    .module-desc, .agent-model {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+    }
+
+    button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background: var(--accent-hover);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    button.secondary {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+    }
+
+    button.secondary:hover {
+      background: var(--border);
+    }
+
+    select {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      cursor: pointer;
+    }
+
+    .output-section {
+      margin-top: 2rem;
+    }
+
+    .output {
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      padding: 1.5rem;
+      border: 1px solid var(--border);
+      max-height: 500px;
+      overflow: auto;
+    }
+
+    pre {
+      font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+      font-size: 0.875rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .event {
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .event:last-child {
+      border-bottom: none;
+    }
+
+    .event-type {
+      font-weight: 500;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      margin-right: 0.5rem;
+    }
+
+    .event-type.user { color: var(--accent); }
+    .event-type.agent { color: var(--success); }
+    .event-type.tool_call { color: #f59e0b; }
+    .event-type.tool_result { color: #06b6d4; }
+
+    .loading {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--text-secondary);
+    }
+
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .status {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+
+    .status.ok { background: var(--success); color: white; }
+    .status.error { background: var(--error); color: white; }
+
+    .eval-section {
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .eval-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.25rem 0;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 2rem;
+      color: var(--text-secondary);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Sandboxy</h1>
+      <div>
+        <select id="agent-select">
+          <option value="">Default Agent</option>
+        </select>
+      </div>
+    </header>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Modules</h2>
+        <div id="modules-list">
+          <div class="empty-state">Loading modules...</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Agents</h2>
+        <div id="agents-list">
+          <div class="empty-state">Loading agents...</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="output-section">
+      <h2>Run Output</h2>
+      <div class="output">
+        <div id="output-content">
+          <div class="empty-state">Select a module and click Run to see results</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      modules: [],
+      agents: [],
+      selectedAgent: '',
+      isRunning: false,
+    };
+
+    async function loadModules() {
+      try {
+        const res = await fetch('/api/modules');
+        const data = await res.json();
+        state.modules = data.modules || [];
+        renderModules();
+      } catch (error) {
+        document.getElementById('modules-list').innerHTML =
+          `<div class="empty-state">Error loading modules: ${error.message}</div>`;
+      }
+    }
+
+    async function loadAgents() {
+      try {
+        const res = await fetch('/api/agents');
+        const data = await res.json();
+        state.agents = data.agents || [];
+        renderAgents();
+        populateAgentSelect();
+      } catch (error) {
+        document.getElementById('agents-list').innerHTML =
+          `<div class="empty-state">Error loading agents: ${error.message}</div>`;
+      }
+    }
+
+    function renderModules() {
+      const container = document.getElementById('modules-list');
+      if (state.modules.length === 0) {
+        container.innerHTML = '<div class="empty-state">No modules found</div>';
+        return;
+      }
+
+      container.innerHTML = state.modules.map(m => `
+        <div class="module-item">
+          <div class="module-info">
+            <div class="module-name">${m.id}</div>
+            <div class="module-desc">${m.description || 'No description'}</div>
+          </div>
+          <button onclick="runModule('${m.path}')" ${state.isRunning ? 'disabled' : ''}>
+            Run
+          </button>
+        </div>
+      `).join('');
+    }
+
+    function renderAgents() {
+      const container = document.getElementById('agents-list');
+      if (state.agents.length === 0) {
+        container.innerHTML = '<div class="empty-state">No agents found</div>';
+        return;
+      }
+
+      container.innerHTML = state.agents.map(a => `
+        <div class="agent-item">
+          <div class="agent-info">
+            <div class="agent-name">${a.name}</div>
+            <div class="agent-model">${a.model}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function populateAgentSelect() {
+      const select = document.getElementById('agent-select');
+      select.innerHTML = '<option value="">Default Agent</option>';
+      state.agents.forEach(a => {
+        const option = document.createElement('option');
+        option.value = a.id;
+        option.textContent = a.name;
+        select.appendChild(option);
+      });
+    }
+
+    async function runModule(modulePath) {
+      if (state.isRunning) return;
+
+      state.isRunning = true;
+      renderModules();
+
+      const outputContent = document.getElementById('output-content');
+      outputContent.innerHTML = `
+        <div class="loading">
+          <div class="spinner"></div>
+          <span>Running module...</span>
+        </div>
+      `;
+
+      const agentId = document.getElementById('agent-select').value || undefined;
+
+      try {
+        const res = await fetch('/api/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ moduleFile: modulePath, agentId }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          outputContent.innerHTML = `
+            <div class="empty-state" style="color: var(--error)">
+              Error: ${data.error || 'Unknown error'}
+              ${data.stderr ? `<pre style="margin-top: 1rem; text-align: left;">${data.stderr}</pre>` : ''}
+            </div>
+          `;
+          return;
+        }
+
+        renderResult(data.result);
+      } catch (error) {
+        outputContent.innerHTML = `
+          <div class="empty-state" style="color: var(--error)">
+            Error: ${error.message}
+          </div>
+        `;
+      } finally {
+        state.isRunning = false;
+        renderModules();
+      }
+    }
+
+    function renderResult(result) {
+      const outputContent = document.getElementById('output-content');
+
+      const eventsHtml = (result.events || []).map(e => {
+        let content = '';
+        if (e.type === 'user') {
+          content = e.payload.content || '';
+        } else if (e.type === 'agent') {
+          content = e.payload.content || '';
+        } else if (e.type === 'tool_call') {
+          content = `${e.payload.tool}.${e.payload.action}(${JSON.stringify(e.payload.args)})`;
+        } else if (e.type === 'tool_result') {
+          content = JSON.stringify(e.payload.result, null, 2);
+        } else {
+          content = JSON.stringify(e.payload);
+        }
+
+        return `
+          <div class="event">
+            <span class="event-type ${e.type}">${e.type}</span>
+            <span>${content}</span>
+          </div>
+        `;
+      }).join('');
+
+      const evalHtml = result.evaluation ? `
+        <div class="eval-section">
+          <div class="eval-item">
+            <span>Score</span>
+            <strong>${result.evaluation.score?.toFixed(3) || 0}</strong>
+          </div>
+          <div class="eval-item">
+            <span>Status</span>
+            <span class="status ${result.evaluation.status}">${result.evaluation.status}</span>
+          </div>
+          <div class="eval-item">
+            <span>Events</span>
+            <span>${result.evaluation.num_events || 0}</span>
+          </div>
+        </div>
+      ` : '';
+
+      outputContent.innerHTML = `
+        <div style="margin-bottom: 1rem;">
+          <strong>Module:</strong> ${result.module_id}<br>
+          <strong>Agent:</strong> ${result.agent_id}
+        </div>
+        <div>${eventsHtml}</div>
+        ${evalHtml}
+      `;
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      loadModules();
+      loadAgents();
+    });
+  </script>
+</body>
+</html>

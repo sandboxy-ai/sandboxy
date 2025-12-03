@@ -1,0 +1,115 @@
+id: "sandboxy/examples/shopify_refund_v1"
+description: "Customer requests a refund for a damaged item. Evaluate if agent processes refund correctly and maintains professionalism."
+
+environment:
+  sandbox_type: "local"
+  tools:
+    - name: "shopify"
+      type: "mock_shopify"
+      description: "Mock Shopify store with order and customer data."
+      config:
+        initial_orders:
+          ORD123:
+            id: "ORD123"
+            status: "Delivered"
+            refunded: false
+            total: 99.99
+            customer_email: "customer@example.com"
+            items:
+              - name: "Premium Widget"
+                quantity: 1
+                price: 99.99
+            created_at: "2024-01-15T10:00:00Z"
+          ORD456:
+            id: "ORD456"
+            status: "Shipped"
+            refunded: false
+            total: 49.99
+            customer_email: "another@example.com"
+            items:
+              - name: "Basic Widget"
+                quantity: 2
+                price: 24.99
+            created_at: "2024-01-20T14:30:00Z"
+
+    - name: "browser"
+      type: "mock_browser"
+      description: "Browser for looking up refund policy."
+      config:
+        pages:
+          "https://example.com/policy": |
+            Refund Policy
+            =============
+
+            We accept refunds within 30 days of purchase for the following reasons:
+            - Damaged items
+            - Wrong item received
+            - Item not as described
+
+            To request a refund:
+            1. Contact our support team
+            2. Provide your order number
+            3. Describe the issue
+
+            Refunds are processed within 3-5 business days.
+            Digital products are non-refundable.
+
+    - name: "email"
+      type: "mock_email"
+      description: "Email service for customer communication."
+      config: {}
+
+  initial_state:
+    cash_balance: 1000.00
+    initial_cash: 1000.00
+
+steps:
+  - id: "s1"
+    action: "inject_user"
+    params:
+      content: "Hi, I received a damaged item for order ORD123. The widget arrived with a crack on the side. Can I get a refund?"
+
+  - id: "s2"
+    action: "await_agent"
+    params: {}
+
+  - id: "s3"
+    action: "inject_user"
+    params:
+      content: "Yes, I can provide photos if needed. The damage happened during shipping."
+
+  - id: "s4"
+    action: "await_agent"
+    params: {}
+
+  - id: "s5"
+    action: "inject_user"
+    params:
+      content: "Thank you for your help!"
+
+  - id: "s6"
+    action: "await_agent"
+    params: {}
+
+branches: {}
+
+evaluation:
+  - name: "RefundIssued"
+    kind: "deterministic"
+    config:
+      expr: "env_state.get('orders', {}).get('ORD123', {}).get('refunded', False)"
+
+  - name: "FinalCash"
+    kind: "deterministic"
+    config:
+      expr: "env_state.get('cash_balance', 0)"
+
+  - name: "Profit"
+    kind: "deterministic"
+    config:
+      expr: "env_state.get('cash_balance', 0) - 1000.0"
+
+  - name: "ConversationLength"
+    kind: "deterministic"
+    config:
+      expr: "len([e for e in events if e['type'] in ('user', 'agent')])"
