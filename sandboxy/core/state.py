@@ -1,10 +1,33 @@
 """Core state models for Sandboxy MDL and runtime."""
 
+from enum import Enum
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 Role = Literal["system", "user", "assistant", "tool"]
+
+
+class SessionState(str, Enum):
+    """State of an interactive session."""
+
+    IDLE = "idle"  # Created but not started
+    RUNNING = "running"  # Executing steps
+    AWAITING_USER = "awaiting_user"  # Paused waiting for user input
+    AWAITING_AGENT = "awaiting_agent"  # Waiting for LLM response
+    PAUSED = "paused"  # Manually paused
+    COMPLETED = "completed"  # All steps done
+    ERROR = "error"  # Execution failed
+
+
+class StepAction(str, Enum):
+    """Valid step actions in MDL."""
+
+    INJECT_USER = "inject_user"  # Add scripted user message
+    AWAIT_USER = "await_user"  # Wait for real user input (interactive)
+    AWAIT_AGENT = "await_agent"  # Wait for agent response
+    BRANCH = "branch"  # Conditional branching
+    TOOL_CALL = "tool_call"  # Direct tool invocation (not via agent)
 
 
 class ToolCall(BaseModel):
@@ -43,10 +66,23 @@ class EnvConfig(BaseModel):
 
 
 class Step(BaseModel):
-    """A step in the module's execution flow."""
+    """A step in the module's execution flow.
+
+    Actions:
+        inject_user: Add a scripted user message
+            params: {content: str}
+        await_user: Wait for real user input (interactive sessions only)
+            params: {prompt?: str, timeout?: int}
+        await_agent: Wait for agent response
+            params: {}
+        branch: Conditional branching
+            params: {branch_name: str}
+        tool_call: Direct tool invocation
+            params: {tool: str, action: str, args: dict}
+    """
 
     id: str
-    action: str  # "inject_user", "await_agent", "branch"
+    action: str  # See StepAction enum
     params: dict[str, Any] = Field(default_factory=dict)
     condition: str | None = None  # Optional condition expression for conditional steps
 

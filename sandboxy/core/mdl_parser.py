@@ -227,7 +227,7 @@ def interpolate_template(text: str, variables: dict[str, Any]) -> str:
     # Simple variable substitution: {{variable}}
     def replace_var(match: re.Match) -> str:
         var_name = match.group(1).strip()
-        return str(variables.get(var_name, f"{{{{var_name}}}}"))
+        return str(variables.get(var_name, "{{var_name}}"))
 
     var_pattern = re.compile(r'\{\{(\w+)\}\}')
     text = var_pattern.sub(replace_var, text)
@@ -345,7 +345,7 @@ def validate_module(path: Path) -> list[str]:
         return [str(e)]
 
     # Validate steps have valid actions
-    valid_actions = {"inject_user", "await_agent", "branch"}
+    valid_actions = {"inject_user", "await_user", "await_agent", "branch", "tool_call"}
     for step in module.steps:
         if step.action not in valid_actions:
             errors.append(f"Step '{step.id}' has invalid action: {step.action}")
