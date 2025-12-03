@@ -3,6 +3,7 @@ import { spawn } from "child_process";
 import { promises as fs } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { parse as parseYaml } from "yaml";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -17,7 +18,15 @@ const RUNS_DIR = path.join(__dirname, "..", "runs");
 const PORT = process.env.PORT || 3000;
 
 /**
- * GET /api/modules - List available MDL modules
+ * Parse a YAML file safely
+ */
+async function parseYamlFile(filePath) {
+  const content = await fs.readFile(filePath, "utf8");
+  return parseYaml(content);
+}
+
+/**
+ * GET /api/modules - List available MDL modules with full metadata
  */
 app.get("/api/modules", async (req, res) => {
   try {
@@ -28,21 +37,61 @@ app.get("/api/modules", async (req, res) => {
     const modules = await Promise.all(
       ymls.map(async (f) => {
         const fullPath = path.join(MODULES_DIR, f);
-        const content = await fs.readFile(fullPath, "utf8");
-        // Extract id and description from YAML (simple regex)
-        const idMatch = content.match(/^id:\s*["']?(.+?)["']?\s*$/m);
-        const descMatch = content.match(/^description:\s*["']?(.+?)["']?\s*$/m);
-        return {
-          filename: f,
-          path: fullPath,
-          id: idMatch ? idMatch[1] : f,
-          description: descMatch ? descMatch[1] : "",
-        };
+        try {
+          const data = await parseYamlFile(fullPath);
+          return {
+            filename: f,
+            path: fullPath,
+            id: data.id || f,
+            name: data.name || data.id || f,
+            description: data.description || "",
+            icon: data.icon || "📋",
+            category: data.category || "",
+            variables: data.variables || [],
+          };
+        } catch (e) {
+          // Fallback to basic info if YAML parsing fails
+          return {
+            filename: f,
+            path: fullPath,
+            id: f,
+            name: f,
+            description: "",
+            icon: "📋",
+            category: "",
+            variables: [],
+          };
+        }
       })
     );
 
     res.json({ modules, count: modules.length });
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/modules/:path - Get detailed module info including variables
+ */
+app.get("/api/modules/*", async (req, res) => {
+  const modulePath = req.params[0];
+
+  try {
+    const data = await parseYamlFile(modulePath);
+    res.json({
+      id: data.id,
+      name: data.name || data.id,
+      description: data.description || "",
+      icon: data.icon || "📋",
+      category: data.category || "",
+      variables: data.variables || [],
+      agent_config: data.agent_config || {},
+    });
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return res.status(404).json({ error: "Module not found" });
+    }
     res.status(500).json({ error: error.message });
   }
 });
@@ -60,16 +109,22 @@ app.get("/api/agents", async (req, res) => {
     const agents = await Promise.all(
       ymls.map(async (f) => {
         const fullPath = path.join(agentsDir, f);
-        const content = await fs.readFile(fullPath, "utf8");
-        const idMatch = content.match(/^id:\s*["']?(.+?)["']?\s*$/m);
-        const nameMatch = content.match(/^name:\s*["']?(.+?)["']?\s*$/m);
-        const modelMatch = content.match(/^model:\s*["']?(.+?)["']?\s*$/m);
-        return {
-          filename: f,
-          id: idMatch ? idMatch[1] : f,
-          name: nameMatch ? nameMatch[1] : f,
-          model: modelMatch ? modelMatch[1] : "unknown",
-        };
+        try {
+          const data = await parseYamlFile(fullPath);
+          return {
+            filename: f,
+            id: data.id || f,
+            name: data.name || data.id || f,
+            model: data.model || "unknown",
+          };
+        } catch (e) {
+          return {
+            filename: f,
+            id: f,
+            name: f,
+            model: "unknown",
+          };
+        }
       })
     );
 
@@ -81,10 +136,10 @@ app.get("/api/agents", async (req, res) => {
 
 /**
  * POST /api/run - Run a module with an agent
- * Body: { moduleFile: string, agentId?: string }
+ * Body: { moduleFile: string, agentId?: string, variables?: object }
  */
 app.post("/api/run", async (req, res) => {
-  const { moduleFile, agentId } = req.body;
+  const { moduleFile, agentId, variables } = req.body;
 
   if (!moduleFile) {
     return res.status(400).json({ error: "moduleFile is required" });
@@ -102,10 +157,16 @@ app.post("/api/run", async (req, res) => {
       args.push("--agent-id", agentId);
     }
 
+    // Pass variables as JSON via environment variable
+    const env = { ...process.env };
+    if (variables && Object.keys(variables).length > 0) {
+      env.SANDBOXY_VARIABLES = JSON.stringify(variables);
+    }
+
     // Spawn sandboxy CLI
     const proc = spawn("sandboxy", args, {
       cwd: path.join(__dirname, ".."),
-      env: { ...process.env },
+      env,
     });
 
     let stdout = "";

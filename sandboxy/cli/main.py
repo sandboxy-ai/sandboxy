@@ -1,13 +1,15 @@
 """CLI entrypoint for Sandboxy."""
 
 import csv
+import json
+import os
 import sys
 from pathlib import Path
 
 import click
 
 from sandboxy.agents.loader import AgentLoader
-from sandboxy.core.mdl_parser import MDLParseError, load_module, validate_module
+from sandboxy.core.mdl_parser import MDLParseError, apply_variables, load_module, validate_module
 from sandboxy.core.runner import Runner
 
 DEFAULT_AGENT_DIRS = [
@@ -24,12 +26,30 @@ def main() -> None:
     pass
 
 
+def _load_variables_from_env() -> dict:
+    """Load variables from SANDBOXY_VARIABLES environment variable."""
+    env_vars = os.environ.get("SANDBOXY_VARIABLES", "")
+    if not env_vars:
+        return {}
+    try:
+        return json.loads(env_vars)
+    except json.JSONDecodeError:
+        return {}
+
+
 @main.command()
 @click.argument("module_path", type=click.Path(exists=True))
 @click.option("--agent-id", "-a", help="Agent ID to use", default=None)
 @click.option("--output", "-o", help="Output file for replay JSON", default=None)
 @click.option("--pretty", "-p", is_flag=True, help="Pretty print output")
-def run(module_path: str, agent_id: str | None, output: str | None, pretty: bool) -> None:
+@click.option("--var", "-v", multiple=True, help="Variable in name=value format")
+def run(
+    module_path: str,
+    agent_id: str | None,
+    output: str | None,
+    pretty: bool,
+    var: tuple[str, ...],
+) -> None:
     """Run a module with a given agent.
 
     MODULE_PATH is the path to an MDL YAML file.
@@ -39,6 +59,20 @@ def run(module_path: str, agent_id: str | None, output: str | None, pretty: bool
     except MDLParseError as e:
         click.echo(f"Error loading module: {e}", err=True)
         sys.exit(1)
+
+    # Load variables from environment and CLI
+    variables = _load_variables_from_env()
+    for v in var:
+        if "=" in v:
+            name, value = v.split("=", 1)
+            # Try to parse as JSON for numbers/booleans
+            try:
+                variables[name] = json.loads(value)
+            except json.JSONDecodeError:
+                variables[name] = value
+
+    # Apply variables to module
+    module = apply_variables(module, variables)
 
     loader = AgentLoader(DEFAULT_AGENT_DIRS)
 
@@ -51,8 +85,15 @@ def run(module_path: str, agent_id: str | None, output: str | None, pretty: bool
         click.echo(f"Error loading agent: {e}", err=True)
         sys.exit(1)
 
+    # Apply module's agent_config overrides
+    if module.agent_config:
+        if "system_prompt" in module.agent_config:
+            agent.config.system_prompt = module.agent_config["system_prompt"]
+
     click.echo(f"Running module: {module.id}")
     click.echo(f"Using agent: {agent.config.id}")
+    if variables:
+        click.echo(f"Variables: {variables}")
     click.echo("")
 
     runner = Runner(module=module, agent=agent)

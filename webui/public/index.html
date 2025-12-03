@@ -3,19 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sandboxy</title>
+  <title>Sandboxy - AI Agent Simulator</title>
   <style>
     :root {
-      --bg-primary: #0b1020;
-      --bg-secondary: #111525;
-      --bg-tertiary: #1a1f35;
-      --text-primary: #f5f5ff;
-      --text-secondary: #a0a0b0;
-      --accent: #6366f1;
-      --accent-hover: #818cf8;
+      --bg-primary: #0a0a0b;
+      --bg-secondary: #141415;
+      --bg-tertiary: #1c1c1e;
+      --bg-hover: #252528;
+      --text-primary: #fafafa;
+      --text-secondary: #a1a1aa;
+      --text-muted: #71717a;
+      --accent: #f97316;
+      --accent-hover: #fb923c;
+      --accent-dim: #ea580c;
+      --accent-glow: rgba(249, 115, 22, 0.15);
       --success: #22c55e;
       --error: #ef4444;
-      --border: #2a2f45;
+      --warning: #f59e0b;
+      --border: #27272a;
+      --border-light: #3f3f46;
     }
 
     * {
@@ -25,7 +31,7 @@
     }
 
     body {
-      font-family: system-ui, -apple-system, sans-serif;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
       background: var(--bg-primary);
       color: var(--text-primary);
       line-height: 1.6;
@@ -33,11 +39,12 @@
     }
 
     .container {
-      max-width: 1200px;
+      max-width: 1400px;
       margin: 0 auto;
-      padding: 2rem;
+      padding: 1.5rem;
     }
 
+    /* Header */
     header {
       display: flex;
       justify-content: space-between;
@@ -47,85 +54,267 @@
       border-bottom: 1px solid var(--border);
     }
 
-    h1 {
-      font-size: 1.75rem;
-      font-weight: 600;
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
     }
 
-    h2 {
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dim) 100%);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       font-size: 1.25rem;
-      font-weight: 500;
-      margin-bottom: 1rem;
-      color: var(--text-secondary);
     }
 
-    .grid {
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+    }
+
+    /* Main Layout */
+    .main-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 2rem;
+      grid-template-columns: 340px 1fr;
+      gap: 1.5rem;
+      min-height: calc(100vh - 140px);
     }
 
-    @media (max-width: 768px) {
-      .grid {
+    @media (max-width: 1024px) {
+      .main-grid {
         grid-template-columns: 1fr;
       }
+    }
+
+    /* Sidebar */
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
     }
 
     .card {
       background: var(--bg-secondary);
       border-radius: 12px;
-      padding: 1.5rem;
       border: 1px solid var(--border);
+      overflow: hidden;
     }
 
-    .module-item, .agent-item {
+    .card-header {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border);
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 1rem;
-      margin-bottom: 0.5rem;
-      background: var(--bg-tertiary);
-      border-radius: 8px;
-      border: 1px solid var(--border);
     }
 
-    .module-item:hover, .agent-item:hover {
-      border-color: var(--accent);
-    }
-
-    .module-info, .agent-info {
-      flex: 1;
-    }
-
-    .module-name, .agent-name {
-      font-weight: 500;
-      margin-bottom: 0.25rem;
-    }
-
-    .module-desc, .agent-model {
+    .card-title {
       font-size: 0.875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
       color: var(--text-secondary);
     }
 
+    .card-body {
+      padding: 1rem;
+    }
+
+    /* Scenario Cards */
+    .scenario-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .scenario-item {
+      padding: 1rem;
+      background: var(--bg-tertiary);
+      border-radius: 8px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .scenario-item:hover {
+      border-color: var(--border-light);
+      background: var(--bg-hover);
+    }
+
+    .scenario-item.selected {
+      border-color: var(--accent);
+      background: var(--accent-glow);
+    }
+
+    .scenario-icon {
+      font-size: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .scenario-name {
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+
+    .scenario-desc {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .scenario-category {
+      display: inline-block;
+      margin-top: 0.5rem;
+      padding: 0.125rem 0.5rem;
+      background: var(--bg-primary);
+      border-radius: 4px;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    /* Variables Panel */
+    .variables-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .variable-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .variable-label {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .variable-value {
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    /* Form Controls */
+    select, input[type="text"] {
+      width: 100%;
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      padding: 0.625rem 0.875rem;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      transition: border-color 0.2s;
+    }
+
+    select:hover, input[type="text"]:hover {
+      border-color: var(--border-light);
+    }
+
+    select:focus, input[type="text"]:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    /* Slider */
+    .slider-container {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    input[type="range"] {
+      flex: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 6px;
+      background: var(--bg-tertiary);
+      border-radius: 3px;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      background: var(--accent);
+      border-radius: 50%;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.1);
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      background: var(--accent);
+      border-radius: 50%;
+      cursor: pointer;
+      border: none;
+    }
+
+    /* Buttons */
     button {
       background: var(--accent);
       color: white;
       border: none;
-      padding: 0.5rem 1rem;
-      border-radius: 6px;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
       cursor: pointer;
       font-size: 0.875rem;
-      font-weight: 500;
-      transition: background 0.2s;
+      font-weight: 600;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
     }
 
     button:hover {
       background: var(--accent-hover);
+      transform: translateY(-1px);
+    }
+
+    button:active {
+      transform: translateY(0);
     }
 
     button:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+      transform: none;
+    }
+
+    button.full-width {
+      width: 100%;
     }
 
     button.secondary {
@@ -134,71 +323,206 @@
     }
 
     button.secondary:hover {
-      background: var(--border);
+      background: var(--bg-hover);
+      border-color: var(--border-light);
     }
 
-    select {
-      background: var(--bg-tertiary);
-      color: var(--text-primary);
-      border: 1px solid var(--border);
-      padding: 0.5rem 1rem;
-      border-radius: 6px;
-      font-size: 0.875rem;
-      cursor: pointer;
+    /* Main Content */
+    .main-content {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
     }
 
-    .output-section {
-      margin-top: 2rem;
-    }
-
-    .output {
+    /* Conversation View */
+    .conversation-container {
+      flex: 1;
       background: var(--bg-secondary);
       border-radius: 12px;
-      padding: 1.5rem;
       border: 1px solid var(--border);
-      max-height: 500px;
-      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      min-height: 500px;
     }
 
-    pre {
-      font-family: 'SF Mono', Monaco, 'Courier New', monospace;
-      font-size: 0.875rem;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-
-    .event {
-      padding: 0.5rem 0;
+    .conversation-header {
+      padding: 1rem 1.25rem;
       border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
 
-    .event:last-child {
-      border-bottom: none;
+    .conversation-title {
+      font-weight: 600;
     }
 
-    .event-type {
-      font-weight: 500;
-      text-transform: uppercase;
-      font-size: 0.75rem;
-      margin-right: 0.5rem;
+    .conversation-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem;
     }
 
-    .event-type.user { color: var(--accent); }
-    .event-type.agent { color: var(--success); }
-    .event-type.tool_call { color: #f59e0b; }
-    .event-type.tool_result { color: #06b6d4; }
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-muted);
+      text-align: center;
+      padding: 2rem;
+    }
 
-    .loading {
+    .empty-state-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      opacity: 0.5;
+    }
+
+    .empty-state-text {
+      max-width: 300px;
+    }
+
+    /* Messages */
+    .message {
+      margin-bottom: 1.5rem;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message-header {
       display: flex;
       align-items: center;
       gap: 0.5rem;
-      color: var(--text-secondary);
+      margin-bottom: 0.5rem;
+    }
+
+    .message-role {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.125rem 0.5rem;
+      border-radius: 4px;
+    }
+
+    .message-role.user {
+      background: var(--accent-glow);
+      color: var(--accent);
+    }
+
+    .message-role.agent {
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--success);
+    }
+
+    .message-role.tool_call {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning);
+    }
+
+    .message-role.tool_result {
+      background: rgba(6, 182, 212, 0.15);
+      color: #06b6d4;
+    }
+
+    .message-content {
+      background: var(--bg-tertiary);
+      padding: 1rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      line-height: 1.7;
+      white-space: pre-wrap;
+    }
+
+    .message-content.user {
+      border-left: 3px solid var(--accent);
+    }
+
+    .message-content.agent {
+      border-left: 3px solid var(--success);
+    }
+
+    .message-content.tool_call,
+    .message-content.tool_result {
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 0.8rem;
+      border-left: 3px solid var(--warning);
+    }
+
+    /* Evaluation Results */
+    .eval-panel {
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      padding: 1.25rem;
+    }
+
+    .eval-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .eval-title {
+      font-weight: 600;
+    }
+
+    .eval-score {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .eval-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 1rem;
+    }
+
+    .eval-item {
+      background: var(--bg-tertiary);
+      padding: 0.875rem;
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    .eval-item-label {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 0.25rem;
+    }
+
+    .eval-item-value {
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+
+    .eval-item-value.success { color: var(--success); }
+    .eval-item-value.error { color: var(--error); }
+    .eval-item-value.warning { color: var(--warning); }
+
+    /* Loading State */
+    .loading-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 1rem;
     }
 
     .spinner {
-      width: 16px;
-      height: 16px;
-      border: 2px solid var(--border);
+      width: 40px;
+      height: 40px;
+      border: 3px solid var(--border);
       border-top-color: var(--accent);
       border-radius: 50%;
       animation: spin 1s linear infinite;
@@ -208,68 +532,99 @@
       to { transform: rotate(360deg); }
     }
 
-    .status {
-      display: inline-block;
-      padding: 0.25rem 0.5rem;
-      border-radius: 4px;
-      font-size: 0.75rem;
-      font-weight: 500;
-    }
-
-    .status.ok { background: var(--success); color: white; }
-    .status.error { background: var(--error); color: white; }
-
-    .eval-section {
-      margin-top: 1rem;
-      padding-top: 1rem;
-      border-top: 1px solid var(--border);
-    }
-
-    .eval-item {
-      display: flex;
-      justify-content: space-between;
-      padding: 0.25rem 0;
-    }
-
-    .empty-state {
-      text-align: center;
-      padding: 2rem;
+    .loading-text {
       color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--bg-primary);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--border-light);
     }
   </style>
 </head>
 <body>
   <div class="container">
     <header>
-      <h1>Sandboxy</h1>
-      <div>
+      <div class="logo">
+        <div class="logo-icon">🧪</div>
+        <h1>Sandboxy</h1>
+      </div>
+      <div class="header-actions">
         <select id="agent-select">
-          <option value="">Default Agent</option>
+          <option value="">Select Agent</option>
         </select>
       </div>
     </header>
 
-    <div class="grid">
-      <div class="card">
-        <h2>Modules</h2>
-        <div id="modules-list">
-          <div class="empty-state">Loading modules...</div>
+    <div class="main-grid">
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <!-- Scenarios -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Scenarios</span>
+          </div>
+          <div class="card-body">
+            <div id="scenarios-list" class="scenario-list">
+              <div class="empty-state">Loading scenarios...</div>
+            </div>
+          </div>
         </div>
+
+        <!-- Variables -->
+        <div class="card" id="variables-card" style="display: none;">
+          <div class="card-header">
+            <span class="card-title">Configuration</span>
+          </div>
+          <div class="card-body">
+            <div id="variables-panel" class="variables-panel"></div>
+          </div>
+        </div>
+
+        <!-- Run Button -->
+        <button id="run-btn" class="full-width" disabled>
+          <span>▶</span> Run Scenario
+        </button>
       </div>
 
-      <div class="card">
-        <h2>Agents</h2>
-        <div id="agents-list">
-          <div class="empty-state">Loading agents...</div>
+      <!-- Main Content -->
+      <div class="main-content">
+        <!-- Conversation -->
+        <div class="conversation-container">
+          <div class="conversation-header">
+            <span class="conversation-title" id="conversation-title">Conversation</span>
+          </div>
+          <div class="conversation-body" id="conversation-body">
+            <div class="empty-state">
+              <div class="empty-state-icon">🎭</div>
+              <div class="empty-state-text">
+                Select a scenario and click Run to see how the AI agent handles it
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
 
-    <div class="output-section">
-      <h2>Run Output</h2>
-      <div class="output">
-        <div id="output-content">
-          <div class="empty-state">Select a module and click Run to see results</div>
+        <!-- Evaluation -->
+        <div class="eval-panel" id="eval-panel" style="display: none;">
+          <div class="eval-header">
+            <span class="eval-title">Evaluation Results</span>
+            <span class="eval-score" id="eval-score">0</span>
+          </div>
+          <div class="eval-grid" id="eval-grid"></div>
         </div>
       </div>
     </div>
@@ -279,96 +634,159 @@
     const state = {
       modules: [],
       agents: [],
+      selectedModule: null,
       selectedAgent: '',
+      variables: {},
       isRunning: false,
     };
 
+    // Load modules
     async function loadModules() {
       try {
         const res = await fetch('/api/modules');
         const data = await res.json();
         state.modules = data.modules || [];
-        renderModules();
+        renderScenarios();
       } catch (error) {
-        document.getElementById('modules-list').innerHTML =
-          `<div class="empty-state">Error loading modules: ${error.message}</div>`;
+        document.getElementById('scenarios-list').innerHTML =
+          `<div class="empty-state">Error: ${error.message}</div>`;
       }
     }
 
+    // Load agents
     async function loadAgents() {
       try {
         const res = await fetch('/api/agents');
         const data = await res.json();
         state.agents = data.agents || [];
-        renderAgents();
         populateAgentSelect();
       } catch (error) {
-        document.getElementById('agents-list').innerHTML =
-          `<div class="empty-state">Error loading agents: ${error.message}</div>`;
+        console.error('Error loading agents:', error);
       }
     }
 
-    function renderModules() {
-      const container = document.getElementById('modules-list');
+    // Render scenarios
+    function renderScenarios() {
+      const container = document.getElementById('scenarios-list');
       if (state.modules.length === 0) {
-        container.innerHTML = '<div class="empty-state">No modules found</div>';
+        container.innerHTML = '<div class="empty-state">No scenarios found</div>';
         return;
       }
 
       container.innerHTML = state.modules.map(m => `
-        <div class="module-item">
-          <div class="module-info">
-            <div class="module-name">${m.id}</div>
-            <div class="module-desc">${m.description || 'No description'}</div>
-          </div>
-          <button onclick="runModule('${m.path}')" ${state.isRunning ? 'disabled' : ''}>
-            Run
-          </button>
+        <div class="scenario-item ${state.selectedModule?.id === m.id ? 'selected' : ''}"
+             onclick="selectScenario('${m.id}')">
+          <div class="scenario-icon">${m.icon || '📋'}</div>
+          <div class="scenario-name">${m.name || m.id}</div>
+          <div class="scenario-desc">${m.description || 'No description'}</div>
+          ${m.category ? `<span class="scenario-category">${m.category}</span>` : ''}
         </div>
       `).join('');
     }
 
-    function renderAgents() {
-      const container = document.getElementById('agents-list');
-      if (state.agents.length === 0) {
-        container.innerHTML = '<div class="empty-state">No agents found</div>';
-        return;
+    // Select scenario
+    async function selectScenario(moduleId) {
+      const module = state.modules.find(m => m.id === moduleId);
+      if (!module) return;
+
+      state.selectedModule = module;
+      renderScenarios();
+
+      // Load module details for variables
+      try {
+        const res = await fetch(`/api/modules/${encodeURIComponent(module.path)}`);
+        const data = await res.json();
+        if (data.variables && data.variables.length > 0) {
+          renderVariables(data.variables);
+          document.getElementById('variables-card').style.display = 'block';
+        } else {
+          document.getElementById('variables-card').style.display = 'none';
+        }
+      } catch (e) {
+        // Module doesn't have detailed endpoint, hide variables
+        document.getElementById('variables-card').style.display = 'none';
       }
 
-      container.innerHTML = state.agents.map(a => `
-        <div class="agent-item">
-          <div class="agent-info">
-            <div class="agent-name">${a.name}</div>
-            <div class="agent-model">${a.model}</div>
-          </div>
-        </div>
-      `).join('');
+      document.getElementById('run-btn').disabled = false;
     }
 
+    // Render variables
+    function renderVariables(variables) {
+      const container = document.getElementById('variables-panel');
+      state.variables = {};
+
+      container.innerHTML = variables.map(v => {
+        state.variables[v.name] = v.default;
+
+        if (v.type === 'select') {
+          return `
+            <div class="variable-group">
+              <label class="variable-label">${v.label}</label>
+              <select onchange="updateVariable('${v.name}', this.value)">
+                ${v.options.map(o => `
+                  <option value="${o.value}" ${o.value === v.default ? 'selected' : ''}>
+                    ${o.label}
+                  </option>
+                `).join('')}
+              </select>
+            </div>
+          `;
+        } else if (v.type === 'slider') {
+          return `
+            <div class="variable-group">
+              <label class="variable-label">
+                ${v.label}
+                <span class="variable-value" id="val-${v.name}">${v.default}</span>
+              </label>
+              <div class="slider-container">
+                <input type="range"
+                       min="${v.min}"
+                       max="${v.max}"
+                       step="${v.step || 1}"
+                       value="${v.default}"
+                       oninput="updateVariable('${v.name}', this.value); document.getElementById('val-${v.name}').textContent = this.value;">
+              </div>
+            </div>
+          `;
+        }
+        return '';
+      }).join('');
+    }
+
+    // Update variable
+    function updateVariable(name, value) {
+      state.variables[name] = value;
+    }
+
+    // Populate agent select
     function populateAgentSelect() {
       const select = document.getElementById('agent-select');
-      select.innerHTML = '<option value="">Default Agent</option>';
+      select.innerHTML = '<option value="">Select Agent</option>';
       state.agents.forEach(a => {
         const option = document.createElement('option');
         option.value = a.id;
-        option.textContent = a.name;
+        option.textContent = `${a.name} (${a.model})`;
         select.appendChild(option);
       });
     }
 
-    async function runModule(modulePath) {
-      if (state.isRunning) return;
+    // Run scenario
+    async function runScenario() {
+      if (!state.selectedModule || state.isRunning) return;
 
       state.isRunning = true;
-      renderModules();
+      document.getElementById('run-btn').disabled = true;
+      document.getElementById('run-btn').innerHTML = '<span class="spinner" style="width:16px;height:16px;border-width:2px;"></span> Running...';
 
-      const outputContent = document.getElementById('output-content');
-      outputContent.innerHTML = `
-        <div class="loading">
+      const body = document.getElementById('conversation-body');
+      body.innerHTML = `
+        <div class="loading-container">
           <div class="spinner"></div>
-          <span>Running module...</span>
+          <div class="loading-text">Running scenario...</div>
         </div>
       `;
+
+      document.getElementById('eval-panel').style.display = 'none';
 
       const agentId = document.getElementById('agent-select').value || undefined;
 
@@ -376,85 +794,121 @@
         const res = await fetch('/api/run', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ moduleFile: modulePath, agentId }),
+          body: JSON.stringify({
+            moduleFile: state.selectedModule.path,
+            agentId,
+            variables: state.variables,
+          }),
         });
 
         const data = await res.json();
 
         if (!res.ok) {
-          outputContent.innerHTML = `
-            <div class="empty-state" style="color: var(--error)">
-              Error: ${data.error || 'Unknown error'}
-              ${data.stderr ? `<pre style="margin-top: 1rem; text-align: left;">${data.stderr}</pre>` : ''}
+          body.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state-icon">❌</div>
+              <div class="empty-state-text" style="color: var(--error)">
+                ${data.error || 'Unknown error'}
+              </div>
             </div>
           `;
           return;
         }
 
-        renderResult(data.result);
+        renderConversation(data.result);
+        renderEvaluation(data.result.evaluation);
       } catch (error) {
-        outputContent.innerHTML = `
-          <div class="empty-state" style="color: var(--error)">
-            Error: ${error.message}
+        body.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">❌</div>
+            <div class="empty-state-text" style="color: var(--error)">
+              ${error.message}
+            </div>
           </div>
         `;
       } finally {
         state.isRunning = false;
-        renderModules();
+        document.getElementById('run-btn').disabled = false;
+        document.getElementById('run-btn').innerHTML = '<span>▶</span> Run Scenario';
       }
     }
 
-    function renderResult(result) {
-      const outputContent = document.getElementById('output-content');
+    // Render conversation
+    function renderConversation(result) {
+      const body = document.getElementById('conversation-body');
+      document.getElementById('conversation-title').textContent = result.module_id;
 
-      const eventsHtml = (result.events || []).map(e => {
+      const events = result.events || [];
+      body.innerHTML = events.map(e => {
         let content = '';
+        let type = e.type;
+
         if (e.type === 'user') {
           content = e.payload.content || '';
         } else if (e.type === 'agent') {
           content = e.payload.content || '';
         } else if (e.type === 'tool_call') {
-          content = `${e.payload.tool}.${e.payload.action}(${JSON.stringify(e.payload.args)})`;
+          content = `${e.payload.tool}.${e.payload.action}(${JSON.stringify(e.payload.args, null, 2)})`;
         } else if (e.type === 'tool_result') {
           content = JSON.stringify(e.payload.result, null, 2);
         } else {
-          content = JSON.stringify(e.payload);
+          return '';
         }
 
         return `
-          <div class="event">
-            <span class="event-type ${e.type}">${e.type}</span>
-            <span>${content}</span>
+          <div class="message">
+            <div class="message-header">
+              <span class="message-role ${type}">${type}</span>
+            </div>
+            <div class="message-content ${type}">${escapeHtml(content)}</div>
           </div>
         `;
       }).join('');
-
-      const evalHtml = result.evaluation ? `
-        <div class="eval-section">
-          <div class="eval-item">
-            <span>Score</span>
-            <strong>${result.evaluation.score?.toFixed(3) || 0}</strong>
-          </div>
-          <div class="eval-item">
-            <span>Status</span>
-            <span class="status ${result.evaluation.status}">${result.evaluation.status}</span>
-          </div>
-          <div class="eval-item">
-            <span>Events</span>
-            <span>${result.evaluation.num_events || 0}</span>
-          </div>
-        </div>
-      ` : '';
-
-      outputContent.innerHTML = `
-        <div style="margin-bottom: 1rem;">
-          <strong>Module:</strong> ${result.module_id}<br>
-          <strong>Agent:</strong> ${result.agent_id}
-        </div>
-        <div>${eventsHtml}</div>
-        ${evalHtml}
-      `;
     }
+
+    // Render evaluation
+    function renderEvaluation(evaluation) {
+      if (!evaluation) return;
+
+      document.getElementById('eval-panel').style.display = 'block';
+      document.getElementById('eval-score').textContent = evaluation.score?.toFixed(1) || '0';
+
+      const grid = document.getElementById('eval-grid');
+      const checks = evaluation.checks || {};
+
+      grid.innerHTML = Object.entries(checks).map(([key, value]) => {
+        let displayValue = value;
+        let className = '';
+
+        if (typeof value === 'boolean') {
+          displayValue = value ? '✓ Yes' : '✗ No';
+          className = value ? 'success' : 'error';
+        } else if (typeof value === 'number') {
+          displayValue = value.toFixed(1);
+          className = value > 0 ? 'success' : value < 0 ? 'error' : '';
+        }
+
+        return `
+          <div class="eval-item">
+            <div class="eval-item-label">${key}</div>
+            <div class="eval-item-value ${className}">${displayValue}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Escape HTML
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Event listeners
+    document.getElementById('run-btn').addEventListener('click', runScenario);
+    document.getElementById('agent-select').addEventListener('change', (e) => {
+      state.selectedAgent = e.target.value;
+    });
 
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {

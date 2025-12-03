@@ -1,5 +1,6 @@
 """MDL (Module Definition Language) parser - YAML to ModuleSpec."""
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -9,8 +10,10 @@ from sandboxy.core.state import (
     EnvConfig,
     EvaluationCheck,
     ModuleSpec,
+    ModuleVariable,
     Step,
     ToolRef,
+    VariableOption,
 )
 
 
@@ -60,6 +63,29 @@ def parse_module(raw: dict[str, Any]) -> ModuleSpec:
     if "id" not in raw:
         raise MDLParseError("Module must have an 'id' field")
 
+    # Parse variables
+    variables = []
+    for v in raw.get("variables", []):
+        options = None
+        if v.get("options"):
+            options = [
+                VariableOption(value=o["value"], label=o["label"])
+                for o in v["options"]
+            ]
+        variables.append(
+            ModuleVariable(
+                name=v["name"],
+                label=v.get("label", v["name"]),
+                description=v.get("description", ""),
+                type=v.get("type", "string"),
+                default=v.get("default"),
+                options=options,
+                min=v.get("min"),
+                max=v.get("max"),
+                step=v.get("step"),
+            )
+        )
+
     # Parse environment
     env_raw = raw.get("environment", {})
     tools = [
@@ -77,12 +103,13 @@ def parse_module(raw: dict[str, Any]) -> ModuleSpec:
         initial_state=env_raw.get("initial_state", {}),
     )
 
-    # Parse steps
+    # Parse steps (with condition support)
     steps = [
         Step(
             id=s["id"],
             action=s["action"],
             params=s.get("params", {}),
+            condition=s.get("condition"),
         )
         for s in raw.get("steps", [])
     ]
@@ -95,6 +122,7 @@ def parse_module(raw: dict[str, Any]) -> ModuleSpec:
                 id=s["id"],
                 action=s["action"],
                 params=s.get("params", {}),
+                condition=s.get("condition"),
             )
             for s in branch_steps
         ]
@@ -109,13 +137,194 @@ def parse_module(raw: dict[str, Any]) -> ModuleSpec:
         for e in raw.get("evaluation", [])
     ]
 
+    # Parse agent_config
+    agent_config = raw.get("agent_config", {})
+
     return ModuleSpec(
         id=raw["id"],
         description=raw.get("description", ""),
+        variables=variables,
+        agent_config=agent_config,
         environment=environment,
         steps=steps,
         branches=branches,
         evaluation=evaluation,
+    )
+
+
+def interpolate_template(text: str, variables: dict[str, Any]) -> str:
+    """Interpolate variables into a template string.
+
+    Supports:
+    - {{variable}} - Simple variable substitution
+    - {{#if condition}}...{{else if condition}}...{{else}}...{{/if}} - Conditional blocks with else-if
+
+    Args:
+        text: Template string with {{variable}} placeholders.
+        variables: Dictionary of variable values.
+
+    Returns:
+        Interpolated string.
+    """
+    if not text:
+        return text
+
+    # Process conditional blocks with support for else-if chains
+    # Match {{#if ...}}...{{/if}} blocks
+    if_pattern = re.compile(
+        r'\{\{#if\s+(.+?)\}\}(.*?)\{\{/if\}\}',
+        re.DOTALL
+    )
+
+    def eval_if_block(match: re.Match) -> str:
+        condition = match.group(1).strip()
+        body = match.group(2) or ""
+
+        # Parse the body for else-if and else clauses
+        # Split by {{else if ...}} and {{else}}
+        parts = re.split(r'\{\{else if\s+(.+?)\}\}|\{\{else\}\}', body)
+
+        # parts[0] is the content for the first if condition
+        # Then alternating: condition (or None for else), content
+
+        # Build list of (condition, content) tuples
+        branches: list[tuple[str | None, str]] = [(condition, parts[0])]
+
+        i = 1
+        while i < len(parts):
+            if i + 1 < len(parts) and parts[i] is not None:
+                # This is an else-if: parts[i] is condition, parts[i+1] is content
+                branches.append((parts[i].strip(), parts[i + 1]))
+                i += 2
+            elif parts[i] is None:
+                # This is an else: content is in the next part
+                if i + 1 < len(parts):
+                    branches.append((None, parts[i + 1]))
+                    i += 2
+                else:
+                    i += 1
+            else:
+                # Orphaned content (shouldn't happen in well-formed templates)
+                branches.append((None, parts[i]))
+                i += 1
+
+        # Evaluate branches in order
+        for cond, content in branches:
+            if cond is None:
+                # This is the else clause - always matches
+                return content.strip()
+            try:
+                if _eval_condition(cond, variables):
+                    return content.strip()
+            except Exception:
+                continue
+
+        # No branch matched
+        return ""
+
+    text = if_pattern.sub(eval_if_block, text)
+
+    # Simple variable substitution: {{variable}}
+    def replace_var(match: re.Match) -> str:
+        var_name = match.group(1).strip()
+        return str(variables.get(var_name, f"{{{{var_name}}}}"))
+
+    var_pattern = re.compile(r'\{\{(\w+)\}\}')
+    text = var_pattern.sub(replace_var, text)
+
+    return text
+
+
+def _eval_condition(condition: str, variables: dict[str, Any]) -> bool:
+    """Safely evaluate a condition expression.
+
+    Args:
+        condition: Condition expression (e.g., "sophistication >= 7").
+        variables: Dictionary of variable values.
+
+    Returns:
+        Boolean result of condition evaluation.
+    """
+    # Safe builtins for condition evaluation
+    safe_builtins = {
+        "True": True,
+        "False": False,
+        "None": None,
+        "len": len,
+        "str": str,
+        "int": int,
+        "float": float,
+        "bool": bool,
+    }
+
+    # Create evaluation context
+    safe_globals = {"__builtins__": safe_builtins}
+    safe_globals.update(variables)
+
+    try:
+        return bool(eval(condition, safe_globals, {}))
+    except Exception:
+        return False
+
+
+def apply_variables(module: ModuleSpec, variables: dict[str, Any]) -> ModuleSpec:
+    """Apply variable values to a module, interpolating templates.
+
+    Args:
+        module: Module specification.
+        variables: Dictionary of variable values (from user or defaults).
+
+    Returns:
+        New ModuleSpec with interpolated values.
+    """
+    # Build complete variable dict with defaults
+    var_dict: dict[str, Any] = {}
+    for var in module.variables:
+        var_dict[var.name] = var.default
+    var_dict.update(variables)
+
+    # Interpolate agent_config system_prompt
+    agent_config = dict(module.agent_config)
+    if "system_prompt" in agent_config:
+        agent_config["system_prompt"] = interpolate_template(
+            agent_config["system_prompt"], var_dict
+        )
+
+    # Interpolate step params and filter by condition
+    new_steps: list[Step] = []
+    for step in module.steps:
+        # Check condition if present
+        if step.condition:
+            if not _eval_condition(step.condition, var_dict):
+                continue  # Skip this step
+
+        # Interpolate params
+        new_params = {}
+        for key, value in step.params.items():
+            if isinstance(value, str):
+                new_params[key] = interpolate_template(value, var_dict)
+            else:
+                new_params[key] = value
+
+        new_steps.append(
+            Step(
+                id=step.id,
+                action=step.action,
+                params=new_params,
+                condition=None,  # Condition already evaluated
+            )
+        )
+
+    # Return new module with interpolated values
+    return ModuleSpec(
+        id=module.id,
+        description=module.description,
+        variables=module.variables,
+        agent_config=agent_config,
+        environment=module.environment,
+        steps=new_steps,
+        branches=module.branches,  # TODO: interpolate branches too if needed
+        evaluation=module.evaluation,
     )
 
 

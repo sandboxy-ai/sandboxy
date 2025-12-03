@@ -48,6 +48,7 @@ class Step(BaseModel):
     id: str
     action: str  # "inject_user", "await_agent", "branch"
     params: dict[str, Any] = Field(default_factory=dict)
+    condition: str | None = None  # Optional condition expression for conditional steps
 
 
 class BranchCondition(BaseModel):
@@ -65,11 +66,34 @@ class EvaluationCheck(BaseModel):
     config: dict[str, Any] = Field(default_factory=dict)
 
 
+class VariableOption(BaseModel):
+    """An option for a select/dropdown variable."""
+
+    value: str
+    label: str
+
+
+class ModuleVariable(BaseModel):
+    """A configurable variable for a module."""
+
+    name: str
+    label: str
+    description: str = ""
+    type: str = "string"  # "string" | "number" | "boolean" | "select" | "slider"
+    default: Any = None
+    options: list[VariableOption] | None = None  # For select type
+    min: float | None = None  # For slider type
+    max: float | None = None  # For slider type
+    step: float | None = None  # For slider type
+
+
 class ModuleSpec(BaseModel):
     """Complete specification for an MDL module."""
 
     id: str
     description: str = ""
+    variables: list[ModuleVariable] = Field(default_factory=list)
+    agent_config: dict[str, Any] = Field(default_factory=dict)  # Override agent settings
     environment: EnvConfig
     steps: list[Step] = Field(default_factory=list)
     branches: dict[str, list[Step]] = Field(default_factory=dict)
