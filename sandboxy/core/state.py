@@ -94,12 +94,84 @@ class BranchCondition(BaseModel):
     next_step: str
 
 
+class CheckKind(str, Enum):
+    """Types of evaluation checks."""
+
+    CONTAINS = "contains"  # Check if target contains/doesn't contain a value
+    REGEX = "regex"  # Check if target matches a regex pattern
+    COUNT = "count"  # Check count of items (min/max)
+    TOOL_CALLED = "tool_called"  # Check if a tool was called
+    EQUALS = "equals"  # Check if target equals a value
+    ENV_STATE = "env_state"  # Check environment state value
+    # Legacy support
+    DETERMINISTIC = "deterministic"  # Raw Python expression (deprecated)
+    LLM = "llm"  # LLM-based evaluation (not implemented)
+
+
+class CheckTarget(str, Enum):
+    """Valid targets for evaluation checks."""
+
+    AGENT_MESSAGES = "agent_messages"  # All agent message content
+    USER_MESSAGES = "user_messages"  # All user message content
+    ALL_MESSAGES = "all_messages"  # All message content
+    TOOL_CALLS = "tool_calls"  # List of tool calls
+    LAST_AGENT_MESSAGE = "last_agent_message"  # Most recent agent message
+    LAST_USER_MESSAGE = "last_user_message"  # Most recent user message
+
+
 class EvaluationCheck(BaseModel):
-    """An evaluation check to run after module execution."""
+    """An evaluation check to run after module execution.
+
+    Predefined check types:
+        contains: Check if target contains a string
+            - target: what to search (e.g., "agent_messages")
+            - value: string to look for
+            - expected: True if should contain, False if should not (default: True)
+            - case_sensitive: whether to do case-sensitive match (default: False)
+
+        regex: Check if target matches a regex pattern
+            - target: what to search
+            - pattern: regex pattern
+            - expected: True if should match, False if should not (default: True)
+
+        count: Check count of items
+            - target: what to count (e.g., "agent_messages", "tool_calls")
+            - min: minimum count (optional)
+            - max: maximum count (optional)
+
+        tool_called: Check if a specific tool was called
+            - tool: tool name
+            - action: action name (optional)
+            - expected: True if should be called, False if should not (default: True)
+
+        equals: Check if a value equals expected
+            - target: what to check (e.g., "env.order_status")
+            - value: expected value
+
+        env_state: Check environment state
+            - key: state key to check
+            - value: expected value
+
+        deterministic: (deprecated) Raw Python expression
+            - expr: Python expression string
+    """
 
     name: str
-    kind: str  # "deterministic" | "llm"
-    config: dict[str, Any] = Field(default_factory=dict)
+    kind: str  # See CheckKind enum
+    # Common fields
+    target: str | None = None  # What to evaluate (see CheckTarget)
+    value: Any = None  # Value to check against
+    expected: bool = True  # Expected result (True = should match/contain)
+    # Type-specific fields
+    pattern: str | None = None  # For regex
+    case_sensitive: bool = False  # For contains
+    min: int | None = None  # For count
+    max: int | None = None  # For count
+    tool: str | None = None  # For tool_called
+    action: str | None = None  # For tool_called
+    key: str | None = None  # For env_state
+    # Legacy support
+    config: dict[str, Any] = Field(default_factory=dict)  # For deterministic/llm
 
 
 class VariableOption(BaseModel):

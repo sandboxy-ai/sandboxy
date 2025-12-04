@@ -23,6 +23,29 @@ export interface SessionConfig {
   variables?: Record<string, unknown>
 }
 
+export interface GameState {
+  cash?: number
+  inventory?: Record<string, number>
+  weather?: string
+  time?: string
+  day?: number
+  turn?: number
+  stats?: {
+    customers_served?: number
+    customers_lost?: number
+    profit?: number
+    reputation?: number
+  }
+  [key: string]: unknown
+}
+
+export interface EventResult {
+  event: string
+  message: string
+  effects?: Record<string, unknown>
+  warning?: string
+}
+
 interface WebSocketMessage {
   type: string
   session_id?: string
@@ -31,6 +54,8 @@ interface WebSocketMessage {
   prompt?: string
   evaluation?: Record<string, unknown>
   message?: string
+  event?: string
+  result?: EventResult
 }
 
 export function useSession() {
@@ -40,9 +65,12 @@ export function useSession() {
   const [awaitingPrompt, setAwaitingPrompt] = useState<string | null>(null)
   const [evaluation, setEvaluation] = useState<Record<string, unknown> | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [gameState, setGameState] = useState<GameState | null>(null)
+  const [lastEvent, setLastEvent] = useState<EventResult | null>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
   const messageIdRef = useRef(0)
+  const mountedRef = useRef(true)
 
   const addMessage = useCallback((
     role: ChatMessage['role'],
@@ -61,22 +89,33 @@ export function useSession() {
   }, [])
 
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      return
+    // Close any existing connection first
+    if (wsRef.current) {
+      wsRef.current.close()
+      wsRef.current = null
     }
 
     setState('connecting')
     setError(null)
 
+    // For port-forwarded dev environments, connect to backend directly on port 8000
+    // In production, use the same host as the page
+    const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/session`)
+    const wsUrl = isLocalDev
+      ? `${protocol}//${window.location.hostname}:8000/ws/session`
+      : `${protocol}//${window.location.host}/ws/session`
+    const ws = new WebSocket(wsUrl)
     wsRef.current = ws
 
     ws.onopen = () => {
-      setState('connected')
+      if (mountedRef.current) {
+        setState('connected')
+      }
     }
 
     ws.onmessage = (event) => {
+      if (!mountedRef.current) return
       const data: WebSocketMessage = JSON.parse(event.data)
 
       switch (data.type) {
@@ -106,48 +145,66 @@ export function useSession() {
           setError(data.message || 'Unknown error')
           addMessage('system', `Error: ${data.message}`)
           break
+
+        case 'event_injected':
+          // Game event was injected (chaos event)
+          if (data.result) {
+            setLastEvent(data.result)
+            addMessage('system', `🎲 ${data.result.message}`, { event: data.event, result: data.result })
+          }
+          break
       }
     }
 
     ws.onerror = () => {
-      setState('error')
-      setError('WebSocket connection error')
+      if (mountedRef.current) {
+        setState('error')
+        setError('WebSocket connection error')
+      }
     }
 
     ws.onclose = () => {
-      if (state !== 'completed' && state !== 'error') {
+      if (mountedRef.current && wsRef.current === ws) {
         setState('disconnected')
       }
-      wsRef.current = null
     }
-  }, [addMessage, state])
+  }, [addMessage])
 
   const handleEvent = useCallback((eventType?: string, payload?: Record<string, unknown>) => {
     if (!eventType || !payload) return
 
     switch (eventType) {
+      case 'user':
       case 'user_message':
         addMessage('user', payload.content as string, payload)
         break
 
+      case 'agent':
       case 'agent_message':
         addMessage('agent', payload.content as string, payload)
         break
 
       case 'tool_call':
-        addMessage('tool', `Tool: ${payload.tool_name}\nArgs: ${JSON.stringify(payload.arguments, null, 2)}`, payload)
+        addMessage('tool', `Tool: ${payload.tool || payload.tool_name}\nArgs: ${JSON.stringify(payload.args || payload.arguments, null, 2)}`, payload)
         break
 
       case 'tool_result':
         addMessage('tool', `Result: ${JSON.stringify(payload.result, null, 2)}`, payload)
+        // Extract game state from check_status results
+        const result = payload.result as { success?: boolean; data?: GameState }
+        if (result?.success && result?.data) {
+          const data = result.data
+          // Update game state if this looks like a status check
+          if (data.cash !== undefined || data.inventory !== undefined) {
+            setGameState(data)
+          }
+        }
         break
 
       case 'step_started':
-        // Optional: show step progress
-        break
-
       case 'step_completed':
-        // Optional: show step completion
+      case 'branch':
+        // Optional: show step/branch progress
         break
     }
   }, [addMessage])
@@ -191,6 +248,24 @@ export function useSession() {
     setAwaitingPrompt(null)
   }, [state])
 
+  const injectEvent = useCallback((eventType: string, toolName: string = 'stand', args?: Record<string, unknown>) => {
+    if (wsRef.current?.readyState !== WebSocket.OPEN) {
+      setError('Not connected to server')
+      return
+    }
+
+    wsRef.current.send(JSON.stringify({
+      type: 'inject_event',
+      tool: toolName,
+      event: eventType,
+      args: args || {},
+    }))
+  }, [])
+
+  const clearLastEvent = useCallback(() => {
+    setLastEvent(null)
+  }, [])
+
   const disconnect = useCallback(() => {
     wsRef.current?.close()
     wsRef.current = null
@@ -199,8 +274,11 @@ export function useSession() {
 
   // Cleanup on unmount
   useEffect(() => {
+    mountedRef.current = true
     return () => {
+      mountedRef.current = false
       wsRef.current?.close()
+      wsRef.current = null
     }
   }, [])
 
@@ -211,9 +289,13 @@ export function useSession() {
     awaitingPrompt,
     evaluation,
     error,
+    gameState,
+    lastEvent,
     connect,
     disconnect,
     startSession,
     sendMessage,
+    injectEvent,
+    clearLastEvent,
   }
 }

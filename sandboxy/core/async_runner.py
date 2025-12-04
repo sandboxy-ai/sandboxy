@@ -87,6 +87,38 @@ class AsyncRunner:
             raise RuntimeError("Not currently awaiting user input")
         self._user_input_future.set_result(content)
 
+    def inject_event(self, tool_name: str, event_type: str, args: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Inject a game event by calling a tool's trigger_event action.
+
+        This is used for chaos injection - frontend can trigger events like
+        "heatwave" or "rush_hour" that modify the game state.
+
+        Args:
+            tool_name: Name of the tool to call (e.g., "stand" for lemonade stand).
+            event_type: Type of event to trigger (e.g., "heatwave", "rush_hour").
+            args: Optional additional arguments for the event.
+
+        Returns:
+            The tool result data.
+
+        Raises:
+            ValueError: If tool not found or event trigger fails.
+        """
+        if tool_name not in self.tools:
+            raise ValueError(f"Tool not found: {tool_name}")
+
+        tool = self.tools[tool_name]
+        event_args = {"event": event_type}
+        if args:
+            event_args.update(args)
+
+        result = tool.invoke("trigger_event", event_args, self.env_state)
+
+        if not result.success:
+            raise ValueError(f"Event trigger failed: {result.error}")
+
+        return result.data or {}
+
     async def run(self) -> AsyncGenerator[RunEvent, None]:
         """Execute the module, yielding events as they occur.
 
@@ -394,17 +426,23 @@ class AsyncRunner:
         num_checks = 0
 
         for check in self.module.evaluation:
-            if check.kind == "deterministic":
-                result = self._eval_deterministic(check)
-                checks[check.name] = result
-                if isinstance(result, (int, float)):
-                    total_score += result
+            result = self._run_check(check)
+            checks[check.name] = result
+
+            # Calculate score contribution
+            if isinstance(result, dict):
+                if result.get("passed") is True:
+                    total_score += 1.0
                     num_checks += 1
-                elif isinstance(result, bool):
-                    total_score += 1.0 if result else 0.0
+                elif result.get("passed") is False:
                     num_checks += 1
-            elif check.kind == "llm":
-                checks[check.name] = {"status": "skipped", "reason": "LLM eval not implemented"}
+                # Skip checks with status "skipped" or "error"
+            elif isinstance(result, bool):
+                total_score += 1.0 if result else 0.0
+                num_checks += 1
+            elif isinstance(result, (int, float)):
+                total_score += result
+                num_checks += 1
 
         score = total_score / num_checks if num_checks > 0 else 0.0
 
@@ -415,8 +453,224 @@ class AsyncRunner:
             status="ok",
         )
 
-    def _eval_deterministic(self, check: Any) -> Any:
-        """Evaluate a deterministic check."""
+    def _run_check(self, check: Any) -> dict[str, Any]:
+        """Run a single evaluation check."""
+        kind = check.kind
+
+        try:
+            if kind == "contains":
+                return self._check_contains(check)
+            elif kind == "regex":
+                return self._check_regex(check)
+            elif kind == "count":
+                return self._check_count(check)
+            elif kind == "tool_called":
+                return self._check_tool_called(check)
+            elif kind == "equals":
+                return self._check_equals(check)
+            elif kind == "env_state":
+                return self._check_env_state(check)
+            elif kind == "deterministic":
+                # Legacy support for raw Python expressions
+                return self._check_deterministic(check)
+            elif kind == "llm":
+                return {"status": "skipped", "reason": "LLM eval not implemented"}
+            else:
+                return {"status": "error", "error": f"Unknown check kind: {kind}"}
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+
+    def _get_target_text(self, target: str) -> str:
+        """Get text content for a target."""
+        if target == "agent_messages":
+            return " ".join(
+                msg.content for msg in self.history if msg.role == "assistant"
+            )
+        elif target == "user_messages":
+            return " ".join(
+                msg.content for msg in self.history if msg.role == "user"
+            )
+        elif target == "all_messages":
+            return " ".join(msg.content for msg in self.history)
+        elif target == "last_agent_message":
+            for msg in reversed(self.history):
+                if msg.role == "assistant":
+                    return msg.content
+            return ""
+        elif target == "last_user_message":
+            for msg in reversed(self.history):
+                if msg.role == "user":
+                    return msg.content
+            return ""
+        else:
+            return ""
+
+    def _get_target_list(self, target: str) -> list[Any]:
+        """Get list of items for a target."""
+        if target == "agent_messages":
+            return [msg for msg in self.history if msg.role == "assistant"]
+        elif target == "user_messages":
+            return [msg for msg in self.history if msg.role == "user"]
+        elif target == "all_messages":
+            return list(self.history)
+        elif target == "tool_calls":
+            return [
+                event for event in self.events if event.type == "tool_call"
+            ]
+        else:
+            return []
+
+    def _check_contains(self, check: Any) -> dict[str, Any]:
+        """Check if target contains a value."""
+        target = check.target or "agent_messages"
+        value = check.value or ""
+        expected = check.expected
+        case_sensitive = check.case_sensitive
+
+        text = self._get_target_text(target)
+
+        if not case_sensitive:
+            text = text.lower()
+            value = value.lower()
+
+        found = value in text
+        passed = found == expected
+
+        return {
+            "passed": passed,
+            "found": found,
+            "expected": expected,
+            "searched_for": check.value,
+            "in": target,
+        }
+
+    def _check_regex(self, check: Any) -> dict[str, Any]:
+        """Check if target matches a regex pattern."""
+        import re
+
+        target = check.target or "agent_messages"
+        pattern = check.pattern or ""
+        expected = check.expected
+
+        text = self._get_target_text(target)
+        match = bool(re.search(pattern, text, re.IGNORECASE if not check.case_sensitive else 0))
+        passed = match == expected
+
+        return {
+            "passed": passed,
+            "matched": match,
+            "expected": expected,
+            "pattern": pattern,
+            "in": target,
+        }
+
+    def _check_count(self, check: Any) -> dict[str, Any]:
+        """Check count of items."""
+        target = check.target or "agent_messages"
+        min_count = check.min
+        max_count = check.max
+
+        items = self._get_target_list(target)
+        count = len(items)
+
+        passed = True
+        if min_count is not None and count < min_count:
+            passed = False
+        if max_count is not None and count > max_count:
+            passed = False
+
+        return {
+            "passed": passed,
+            "count": count,
+            "min": min_count,
+            "max": max_count,
+            "target": target,
+        }
+
+    def _check_tool_called(self, check: Any) -> dict[str, Any]:
+        """Check if a specific tool was called."""
+        tool_name = check.tool
+        action_name = check.action
+        expected = check.expected
+
+        tool_calls = [e for e in self.events if e.type == "tool_call"]
+
+        called = False
+        for tc in tool_calls:
+            payload = tc.payload
+            if payload.get("tool") == tool_name:
+                if action_name is None or payload.get("action") == action_name:
+                    called = True
+                    break
+
+        passed = called == expected
+
+        return {
+            "passed": passed,
+            "called": called,
+            "expected": expected,
+            "tool": tool_name,
+            "action": action_name,
+        }
+
+    def _check_equals(self, check: Any) -> dict[str, Any]:
+        """Check if a value equals expected."""
+        target = check.target or ""
+        expected_value = check.value
+
+        # Handle env.* targets
+        if target.startswith("env."):
+            key = target[4:]
+            actual_value = self.env_state.get(key)
+        else:
+            actual_value = self._get_target_text(target)
+
+        passed = actual_value == expected_value
+
+        return {
+            "passed": passed,
+            "actual": actual_value,
+            "expected": expected_value,
+            "target": target,
+        }
+
+    def _get_nested_value(self, obj: Any, path: str) -> Any:
+        """Get a nested value using dot notation (e.g., 'orders.ORD123.refunded')."""
+        keys = path.split(".")
+        current = obj
+        for key in keys:
+            if current is None:
+                return None
+            if isinstance(current, dict):
+                current = current.get(key)
+            elif hasattr(current, key):
+                current = getattr(current, key)
+            else:
+                return None
+        return current
+
+    def _check_env_state(self, check: Any) -> dict[str, Any]:
+        """Check environment state value. Supports dot notation for nested access."""
+        key = check.key or ""
+        expected_value = check.value
+
+        # Support dot notation for nested values (e.g., "orders.ORD123.refunded")
+        if "." in key:
+            actual_value = self._get_nested_value(self.env_state, key)
+        else:
+            actual_value = self.env_state.get(key)
+
+        passed = actual_value == expected_value
+
+        return {
+            "passed": passed,
+            "actual": actual_value,
+            "expected": expected_value,
+            "key": key,
+        }
+
+    def _check_deterministic(self, check: Any) -> dict[str, Any]:
+        """Legacy: Evaluate a deterministic check with Python expression."""
         expr = check.config.get("expr", "")
         if not expr or expr == "TODO":
             return {"status": "skipped", "reason": "No expression defined"}
@@ -429,12 +683,15 @@ class AsyncRunner:
 
         try:
             result = self._safe_eval(expr, context)
-            return result
+            if isinstance(result, bool):
+                return {"passed": result, "legacy": True}
+            else:
+                return {"passed": bool(result), "value": result, "legacy": True}
         except Exception as e:
             return {"status": "error", "error": str(e)}
 
     def _safe_eval(self, expr: str, context: dict[str, Any]) -> Any:
-        """Safely evaluate an expression with restricted scope."""
+        """Safely evaluate an expression with restricted scope (legacy support)."""
         safe_builtins = {
             "True": True,
             "False": False,

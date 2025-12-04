@@ -128,14 +128,27 @@ def parse_module(raw: dict[str, Any]) -> ModuleSpec:
         ]
 
     # Parse evaluation
-    evaluation = [
-        EvaluationCheck(
+    evaluation = []
+    for e in raw.get("evaluation", []):
+        check = EvaluationCheck(
             name=e["name"],
             kind=e["kind"],
+            # Common fields
+            target=e.get("target"),
+            value=e.get("value"),
+            expected=e.get("expected", True),
+            # Type-specific fields
+            pattern=e.get("pattern"),
+            case_sensitive=e.get("case_sensitive", False),
+            min=e.get("min"),
+            max=e.get("max"),
+            tool=e.get("tool"),
+            action=e.get("action"),
+            key=e.get("key"),
+            # Legacy support
             config=e.get("config", {}),
         )
-        for e in raw.get("evaluation", [])
-    ]
+        evaluation.append(check)
 
     # Parse agent_config
     agent_config = raw.get("agent_config", {})
@@ -267,6 +280,30 @@ def _eval_condition(condition: str, variables: dict[str, Any]) -> bool:
         return False
 
 
+def _interpolate_value(value: Any, var_dict: dict[str, Any]) -> Any:
+    """Recursively interpolate variables in a value.
+
+    Handles strings, dicts, and lists. For strings that look like
+    pure variable references (e.g., "{{starting_cash}}"), attempts
+    to return the actual typed value instead of a string.
+    """
+    if isinstance(value, str):
+        # Check if it's a pure variable reference like "{{var_name}}"
+        pure_var_match = re.match(r'^\{\{(\w+)\}\}$', value.strip())
+        if pure_var_match:
+            var_name = pure_var_match.group(1)
+            if var_name in var_dict:
+                return var_dict[var_name]
+        # Otherwise do string interpolation
+        return interpolate_template(value, var_dict)
+    elif isinstance(value, dict):
+        return {k: _interpolate_value(v, var_dict) for k, v in value.items()}
+    elif isinstance(value, list):
+        return [_interpolate_value(item, var_dict) for item in value]
+    else:
+        return value
+
+
 def apply_variables(module: ModuleSpec, variables: dict[str, Any]) -> ModuleSpec:
     """Apply variable values to a module, interpolating templates.
 
@@ -290,6 +327,29 @@ def apply_variables(module: ModuleSpec, variables: dict[str, Any]) -> ModuleSpec
             agent_config["system_prompt"], var_dict
         )
 
+    # Interpolate environment config (tools and initial_state)
+    new_tools = []
+    for tool in module.environment.tools:
+        new_config = _interpolate_value(tool.config, var_dict)
+        new_tools.append(
+            ToolRef(
+                name=tool.name,
+                type=tool.type,
+                description=tool.description,
+                config=new_config,
+            )
+        )
+
+    new_initial_state = _interpolate_value(
+        dict(module.environment.initial_state), var_dict
+    )
+
+    new_environment = EnvConfig(
+        sandbox_type=module.environment.sandbox_type,
+        tools=new_tools,
+        initial_state=new_initial_state,
+    )
+
     # Interpolate step params and filter by condition
     new_steps: list[Step] = []
     for step in module.steps:
@@ -299,12 +359,7 @@ def apply_variables(module: ModuleSpec, variables: dict[str, Any]) -> ModuleSpec
                 continue  # Skip this step
 
         # Interpolate params
-        new_params = {}
-        for key, value in step.params.items():
-            if isinstance(value, str):
-                new_params[key] = interpolate_template(value, var_dict)
-            else:
-                new_params[key] = value
+        new_params = _interpolate_value(dict(step.params), var_dict)
 
         new_steps.append(
             Step(
@@ -321,7 +376,7 @@ def apply_variables(module: ModuleSpec, variables: dict[str, Any]) -> ModuleSpec
         description=module.description,
         variables=module.variables,
         agent_config=agent_config,
-        environment=module.environment,
+        environment=new_environment,
         steps=new_steps,
         branches=module.branches,  # TODO: interpolate branches too if needed
         evaluation=module.evaluation,

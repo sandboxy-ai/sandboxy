@@ -20,6 +20,7 @@ BUILTIN_TOOLS: dict[str, str] = {
     "mock_shopify": "sandboxy.tools.mock_shopify:MockShopifyTool",
     "mock_browser": "sandboxy.tools.mock_browser:MockBrowserTool",
     "mock_email": "sandboxy.tools.mock_email:MockEmailTool",
+    "mock_lemonade": "sandboxy.tools.mock_lemonade:MockLemonadeTool",
 }
 
 

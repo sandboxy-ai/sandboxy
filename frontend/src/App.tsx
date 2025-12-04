@@ -1,15 +1,21 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, useParams } from 'react-router-dom'
 import HomePage from './pages/HomePage'
 import SessionPage from './pages/SessionPage'
 import BuilderPage from './pages/BuilderPage'
 import Layout from './components/Layout'
+
+// Wrapper to force remount when slug changes
+function SessionPageWrapper() {
+  const { moduleSlug } = useParams()
+  return <SessionPage key={moduleSlug} />
+}
 
 function App() {
   return (
     <Layout>
       <Routes>
         <Route path="/" element={<HomePage />} />
-        <Route path="/session/:moduleSlug" element={<SessionPage />} />
+        <Route path="/session/:moduleSlug" element={<SessionPageWrapper />} />
         <Route path="/builder" element={<BuilderPage />} />
         <Route path="/builder/:moduleSlug" element={<BuilderPage />} />
       </Routes>

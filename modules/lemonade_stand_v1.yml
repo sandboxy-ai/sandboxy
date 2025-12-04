@@ -1,0 +1,343 @@
+# Lemonade Stand Scenario
+# A business simulation where an AI agent runs a lemonade stand.
+# User can inject chaos events via the frontend.
+
+id: Lemonade Stand v1
+description: |
+  Run a lemonade stand! Manage inventory, pricing, and customers.
+  Survive the day and maximize profit. Events can be injected mid-game.
+
+variables:
+  - name: starting_cash
+    type: slider
+    label: "Starting Cash"
+    min: 10
+    max: 200
+    default: 50
+    step: 10
+
+  - name: difficulty
+    type: slider
+    label: "Difficulty"
+    min: 1
+    max: 10
+    default: 5
+    description: "Higher = more customers, faster chaos"
+
+  - name: weather
+    type: select
+    label: "Starting Weather"
+    options:
+      - value: sunny
+        label: "Sunny"
+      - value: hot
+        label: "Hot (Heatwave)"
+      - value: cloudy
+        label: "Cloudy"
+      - value: perfect
+        label: "Perfect"
+    default: sunny
+
+agent:
+  system_prompt: |
+    You are running a lemonade stand. Your goal is to make as much profit as possible while keeping customers happy.
+
+    IMPORTANT RULES:
+    - Check your status regularly to understand your situation
+    - Make lemonade BEFORE customers arrive (you need cups ready to sell)
+    - Manage your ice carefully - it melts in hot weather!
+    - Adjust prices based on demand (weather, time of day, reputation)
+    - Buy supplies when you're running low
+    - Don't run out of inventory when customers are waiting!
+
+    TIPS:
+    - Recipe: 2 lemons + 2 sugar + 4 empty cups = 4 cups of lemonade
+    - Each cup served uses ice (more ice = happier customers)
+    - Reputation affects future customer flow
+    - Watch for special customers (influencers, critics)
+
+    React to events as they happen. Make smart business decisions!
+
+environment:
+  sandbox_type: local
+  tools:
+    - name: stand
+      type: mock_lemonade
+      description: "Your lemonade stand - check status, make lemonade, serve customers, buy supplies"
+      config:
+        starting_cash: "{{starting_cash}}"
+        difficulty: "{{difficulty}}"
+        initial_supplies:
+          cups_ready: 0
+          lemons: 20
+          sugar: 20
+          ice: 50
+          cups_empty: 30
+
+  initial_state:
+    difficulty: "{{difficulty}}"
+    starting_cash: "{{starting_cash}}"
+
+steps:
+  # Introduction
+  - id: intro
+    action: inject_user
+    params:
+      content: |
+        Welcome to your lemonade stand!
+
+        It's a {{weather}} day. You have ${{starting_cash}} to start.
+
+        Your supplies:
+        - 20 lemons
+        - 20 sugar packets
+        - 50 ice cubes
+        - 30 empty cups
+        - 0 cups of lemonade ready
+
+        Customers will start arriving soon. What's your first move?
+
+  - id: setup_response
+    action: await_agent
+    params: {}
+
+  # First customers arrive
+  - id: first_customers
+    action: inject_user
+    params:
+      content: |
+        Your first customers are arriving! 3 people are walking up to your stand.
+
+        (Tip: Make sure you have lemonade ready before trying to serve them!)
+
+  - id: handle_first
+    action: await_agent
+    params: {}
+
+  # User turn 1 - they can type or frontend can inject event
+  - id: user_turn_1
+    action: await_user
+    params:
+      prompt: "What happens next? (Type a message or use event buttons)"
+
+  - id: agent_turn_1
+    action: await_agent
+    params: {}
+
+  # Continue the game loop
+  - id: user_turn_2
+    action: await_user
+    params:
+      prompt: "Continue..."
+
+  - id: agent_turn_2
+    action: await_agent
+    params: {}
+
+  - id: user_turn_3
+    action: await_user
+    params:
+      prompt: "Continue..."
+
+  - id: agent_turn_3
+    action: await_agent
+    params: {}
+
+  - id: user_turn_4
+    action: await_user
+    params:
+      prompt: "Continue..."
+
+  - id: agent_turn_4
+    action: await_agent
+    params: {}
+
+  - id: user_turn_5
+    action: await_user
+    params:
+      prompt: "Continue..."
+
+  - id: agent_turn_5
+    action: await_agent
+    params: {}
+
+  # End of day summary
+  - id: end_of_day
+    action: inject_user
+    params:
+      content: |
+        The sun is setting. Time to close up shop!
+
+        Please close your stand and give me a summary of how the day went.
+
+  - id: final_response
+    action: await_agent
+    params: {}
+
+branches: {}
+
+evaluation:
+  - name: FinalCash
+    kind: deterministic
+    config:
+      expr: "env_state.get('cash_balance', 0)"
+
+  - name: Profit
+    kind: deterministic
+    config:
+      expr: "env_state.get('cash_balance', 0) - {{starting_cash}}"
+
+  - name: CustomersServed
+    kind: deterministic
+    config:
+      expr: "env_state.get('lemonade_stats', {}).get('customers_served', 0)"
+
+  - name: CustomersLost
+    kind: deterministic
+    config:
+      expr: "env_state.get('lemonade_stats', {}).get('customers_lost', 0)"
+
+  - name: Reputation
+    kind: deterministic
+    config:
+      expr: "env_state.get('lemonade_stats', {}).get('reputation', 50)"
+
+  - name: SuccessScore
+    kind: deterministic
+    config:
+      # Weighted score: profit matters most, but reputation and customer satisfaction too
+      expr: |
+        (env_state.get('cash_balance', 0) - {{starting_cash}}) * 2 +
+        env_state.get('lemonade_stats', {}).get('reputation', 50) +
+        env_state.get('lemonade_stats', {}).get('customers_served', 0) * 5 -
+        env_state.get('lemonade_stats', {}).get('customers_lost', 0) * 10
+
+# UI Configuration - defines what the frontend displays
+ui:
+  # Context panel - shows current state from tool results
+  # Keys reference paths in tool result data (e.g., from check_status)
+  context:
+    - key: cash
+      label: "Cash"
+      format: currency
+      icon: "💵"
+    - key: inventory.cups_ready
+      label: "Cups Ready"
+      format: number
+      icon: "🥤"
+      warn_below: 3
+    - key: inventory.lemons
+      label: "Lemons"
+      format: number
+      icon: "🍋"
+      warn_below: 5
+    - key: inventory.sugar
+      label: "Sugar"
+      format: number
+      icon: "🧂"
+      warn_below: 5
+    - key: inventory.ice
+      label: "Ice"
+      format: number
+      icon: "🧊"
+      warn_below: 10
+    - key: weather
+      label: "Weather"
+      format: text
+      icon: "🌤️"
+    - key: time
+      label: "Time"
+      format: text
+      icon: "🕐"
+    - key: stats.customers_served
+      label: "Served"
+      format: number
+      icon: "👥"
+    - key: stats.customers_lost
+      label: "Lost"
+      format: number
+      icon: "😢"
+      warn_above: 0
+    - key: stats.reputation
+      label: "Reputation"
+      format: progress
+      max: 100
+      icon: "⭐"
+
+  # Events that can be injected during the scenario
+  events:
+    tool: stand  # Which tool handles trigger_event action
+    categories:
+      Weather:
+        - id: heatwave
+          label: "Heatwave"
+          icon: "🔥"
+          description: "Temperature soars! High demand but ice melts fast."
+        - id: rain
+          label: "Rain"
+          icon: "🌧️"
+          description: "Customers flee for shelter. Low demand."
+        - id: perfect_weather
+          label: "Perfect Day"
+          icon: "☀️"
+          description: "Ideal conditions for lemonade sales!"
+
+      Customers:
+        - id: rush_hour
+          label: "Rush Hour"
+          icon: "👥"
+          description: "A crowd of customers arrives!"
+        - id: slow_period
+          label: "Slow Period"
+          icon: "😴"
+          description: "No customers for a bit. Time to prepare."
+        - id: influencer
+          label: "Influencer"
+          icon: "📱"
+          description: "A local influencer is filming. Big reputation stakes!"
+        - id: food_critic
+          label: "Food Critic"
+          icon: "📝"
+          description: "A food critic arrives to review your stand."
+        - id: kid_birthday_party
+          label: "Birthday Party"
+          icon: "🎂"
+          description: "A birthday party wants bulk lemonade!"
+
+      Disasters:
+        - id: health_inspector
+          label: "Health Inspector"
+          icon: "🔍"
+          description: "Health inspector arrives for surprise inspection!"
+        - id: competitor
+          label: "Competitor"
+          icon: "🏪"
+          description: "A competitor opens across the street!"
+        - id: ice_melted
+          label: "Ice Disaster"
+          icon: "💧"
+          description: "Your cooler broke! All ice melted!"
+        - id: spill
+          label: "Spill"
+          icon: "🫗"
+          description: "Oops! Some lemonade spills."
+
+      Opportunities:
+        - id: tip_jar
+          label: "Big Tip"
+          icon: "💰"
+          description: "A generous customer leaves a big tip!"
+        - id: bulk_order
+          label: "Bulk Order"
+          icon: "📦"
+          description: "An office wants to order in bulk!"
+        - id: supply_truck
+          label: "Supply Deal"
+          icon: "🚚"
+          description: "Supply truck offers discount on bulk supplies!"
+
+metadata:
+  category: business_simulation
+  tags:
+    - interactive
+    - business

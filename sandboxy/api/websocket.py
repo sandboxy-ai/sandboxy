@@ -5,10 +5,13 @@ import json
 from pathlib import Path
 from typing import Any
 
+import yaml
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from sandboxy.agents.loader import AgentLoader
-from sandboxy.core.mdl_parser import apply_variables, load_module
+from sandboxy.core.mdl_parser import apply_variables, load_module, parse_module
+from sandboxy.db import crud
+from sandboxy.db.database import get_db
 from sandboxy.session.manager import session_manager
 
 router = APIRouter()
@@ -48,8 +51,9 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-def _load_module_from_id(module_id: str):
+async def _load_module_from_id(module_id: str):
     """Load a module from ID (either file:slug or database ID)."""
+    # Try file-based modules first
     if module_id.startswith("file:"):
         slug = module_id[5:]
         for ext in [".yml", ".yaml"]:
@@ -57,13 +61,21 @@ def _load_module_from_id(module_id: str):
             if path.exists():
                 return load_module(path)
         raise ValueError(f"Module file not found: {slug}")
-    else:
-        # Try loading by slug from files
-        for ext in [".yml", ".yaml"]:
-            path = MODULES_DIR / f"{module_id}{ext}"
-            if path.exists():
-                return load_module(path)
-        raise ValueError(f"Module not found: {module_id}")
+
+    # Try loading by slug from files
+    for ext in [".yml", ".yaml"]:
+        path = MODULES_DIR / f"{module_id}{ext}"
+        if path.exists():
+            return load_module(path)
+
+    # Try loading from database
+    async for db in get_db():
+        db_module = await crud.get_module_by_slug(db, module_id)
+        if db_module and db_module.yaml_content:
+            raw = yaml.safe_load(db_module.yaml_content)
+            return parse_module(raw)
+
+    raise ValueError(f"Module not found: {module_id}")
 
 
 @router.websocket("/ws/session")
@@ -156,7 +168,7 @@ async def websocket_session(websocket: WebSocket):
 
                 try:
                     # Load module
-                    module = _load_module_from_id(module_id)
+                    module = await _load_module_from_id(module_id)
 
                     # Apply variables
                     module = apply_variables(module, variables)
@@ -208,6 +220,61 @@ async def websocket_session(websocket: WebSocket):
                 try:
                     session_manager.provide_input(session_id, content)
                 except RuntimeError as e:
+                    await websocket.send_json({
+                        "type": "error",
+                        "session_id": session_id,
+                        "message": str(e),
+                    })
+
+            elif msg_type == "inject_event":
+                # Inject a game event (chaos injection)
+                if not session_id:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "No active session. Send 'start' first.",
+                    })
+                    continue
+
+                tool_name = message.get("tool", "stand")
+                event_type = message.get("event")
+                event_args = message.get("args", {})
+
+                if not event_type:
+                    await websocket.send_json({
+                        "type": "error",
+                        "session_id": session_id,
+                        "message": "event type is required",
+                    })
+                    continue
+
+                try:
+                    # Inject the event
+                    result = session_manager.inject_event(
+                        session_id, tool_name, event_type, event_args
+                    )
+
+                    # Send event notification to frontend
+                    await websocket.send_json({
+                        "type": "event_injected",
+                        "session_id": session_id,
+                        "event": event_type,
+                        "result": result,
+                    })
+
+                    # Format event as user message and provide as input
+                    # This makes the agent react to the event
+                    event_message = result.get("message", f"EVENT: {event_type}")
+                    if "warning" in result:
+                        event_message += f"\n{result['warning']}"
+
+                    try:
+                        session_manager.provide_input(session_id, event_message)
+                    except RuntimeError:
+                        # Not awaiting input - that's okay, event still happened
+                        # The state was modified, agent will see it on next check_status
+                        pass
+
+                except ValueError as e:
                     await websocket.send_json({
                         "type": "error",
                         "session_id": session_id,

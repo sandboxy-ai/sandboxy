@@ -10,10 +10,31 @@ import {
   Node,
   Edge,
   BackgroundVariant,
+  Handle,
+  Position,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Plus, Save, Code } from 'lucide-react'
+import { Plus, Save, Code, Trash2, CheckCircle } from 'lucide-react'
 import { api } from '../lib/api'
+
+// Evaluation check types
+type CheckKind = 'contains' | 'regex' | 'count' | 'tool_called' | 'env_state' | 'equals'
+type CheckTarget = 'agent_messages' | 'user_messages' | 'all_messages' | 'tool_calls'
+
+interface EvaluationCheck {
+  id: string
+  name: string
+  kind: CheckKind
+  target?: CheckTarget
+  value?: string
+  expected?: boolean
+  pattern?: string
+  min?: number
+  max?: number
+  tool?: string
+  action?: string
+  key?: string
+}
 
 // Custom node types
 const nodeTypes = {
@@ -45,6 +66,9 @@ export default function BuilderPage() {
   const [selectedNode, setSelectedNode] = useState<Node | null>(null)
   const [showYaml, setShowYaml] = useState(false)
   const [moduleName, setModuleName] = useState('new-module')
+  const [evaluationChecks, setEvaluationChecks] = useState<EvaluationCheck[]>([])
+  const [activeTab, setActiveTab] = useState<'steps' | 'evaluation'>('steps')
+  const [selectedCheck, setSelectedCheck] = useState<EvaluationCheck | null>(null)
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
@@ -72,6 +96,34 @@ export default function BuilderPage() {
     setNodes((nds) => [...nds, newNode])
   }, [nodes, setNodes])
 
+  const addCheck = useCallback((kind: CheckKind) => {
+    const newCheck: EvaluationCheck = {
+      id: `check-${Date.now()}`,
+      name: `${kind}_check`,
+      kind,
+      expected: kind === 'contains' || kind === 'regex' ? false : true,
+      target: kind === 'count' ? 'agent_messages' : kind === 'contains' || kind === 'regex' ? 'agent_messages' : undefined,
+    }
+    setEvaluationChecks((checks) => [...checks, newCheck])
+    setSelectedCheck(newCheck)
+  }, [])
+
+  const updateCheck = useCallback((id: string, updates: Partial<EvaluationCheck>) => {
+    setEvaluationChecks((checks) =>
+      checks.map((c) => (c.id === id ? { ...c, ...updates } : c))
+    )
+    if (selectedCheck?.id === id) {
+      setSelectedCheck((prev) => prev ? { ...prev, ...updates } : null)
+    }
+  }, [selectedCheck])
+
+  const removeCheck = useCallback((id: string) => {
+    setEvaluationChecks((checks) => checks.filter((c) => c.id !== id))
+    if (selectedCheck?.id === id) {
+      setSelectedCheck(null)
+    }
+  }, [selectedCheck])
+
   const generateYaml = useCallback(() => {
     const steps = nodes
       .filter((n) => n.type === 'stepNode')
@@ -82,7 +134,28 @@ export default function BuilderPage() {
         params: node.data.params,
       }))
 
-    const yaml = `name: "${moduleName}"
+    const slug = moduleName.toLowerCase().replace(/\s+/g, '-')
+
+    // Generate evaluation YAML
+    const evalYaml = evaluationChecks.length === 0
+      ? 'evaluation: []'
+      : `evaluation:
+${evaluationChecks.map((check) => {
+  const lines = [`  - name: "${check.name}"`, `    kind: "${check.kind}"`]
+  if (check.target) lines.push(`    target: "${check.target}"`)
+  if (check.value !== undefined) lines.push(`    value: "${check.value}"`)
+  if (check.expected !== undefined) lines.push(`    expected: ${check.expected}`)
+  if (check.pattern) lines.push(`    pattern: "${check.pattern}"`)
+  if (check.min !== undefined) lines.push(`    min: ${check.min}`)
+  if (check.max !== undefined) lines.push(`    max: ${check.max}`)
+  if (check.tool) lines.push(`    tool: "${check.tool}"`)
+  if (check.action) lines.push(`    action: "${check.action}"`)
+  if (check.key) lines.push(`    key: "${check.key}"`)
+  return lines.join('\n')
+}).join('\n\n')}`
+
+    const yaml = `id: "${slug}"
+name: "${moduleName}"
 description: "Created with Sandboxy Builder"
 version: "1.0"
 
@@ -96,11 +169,10 @@ ${Object.entries(step.params || {})
   .map(([key, value]) => `      ${key}: ${JSON.stringify(value)}`)
   .join('\n')}`).join('\n\n')}
 
-evaluation:
-  checks: []
+${evalYaml}
 `
     return yaml
-  }, [nodes, moduleName])
+  }, [nodes, moduleName, evaluationChecks])
 
   const handleSave = async () => {
     const yaml = generateYaml()
@@ -184,6 +256,9 @@ evaluation:
           onNodeClick={onNodeClick}
           nodeTypes={nodeTypes}
           fitView
+          deleteKeyCode={null}
+          selectionKeyCode={null}
+          multiSelectionKeyCode={null}
           style={{ background: '#0a0a0b' }}
         >
           <Controls
@@ -213,21 +288,30 @@ evaluation:
       </div>
 
       {/* Properties panel */}
-      {selectedNode && selectedNode.type === 'stepNode' && (
-        <div className="w-72 bg-dark-card border-l border-dark-border p-4">
-          <h2 className="text-lg font-semibold text-white mb-4">Properties</h2>
-          <NodeProperties
-            node={selectedNode}
-            onChange={(data) => {
-              setNodes((nds) =>
-                nds.map((n) =>
-                  n.id === selectedNode.id ? { ...n, data: { ...n.data, ...data } } : n
+      {selectedNode && selectedNode.type === 'stepNode' && (() => {
+        // Get the current node from nodes array to avoid stale state
+        const currentNode = nodes.find(n => n.id === selectedNode.id)
+        if (!currentNode) return null
+        return (
+          <div
+            className="w-72 bg-dark-card border-l border-dark-border p-4"
+            onKeyDown={(e) => e.stopPropagation()}
+            onKeyUp={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold text-white mb-4">Properties</h2>
+            <NodeProperties
+              node={currentNode}
+              onChange={(data) => {
+                setNodes((nds) =>
+                  nds.map((n) =>
+                    n.id === currentNode.id ? { ...n, data: { ...n.data, ...data } } : n
+                  )
                 )
-              )
-            }}
-          />
-        </div>
-      )}
+              }}
+            />
+          </div>
+        )
+      })()}
     </div>
   )
 }
@@ -254,10 +338,20 @@ function StepNode({ data }: { data: { label: string; stepType: string } }) {
 
   return (
     <div
-      className={`bg-dark-card border-2 ${typeColors[data.stepType] || 'border-dark-border'} rounded-lg px-4 py-3 min-w-[180px]`}
+      className={`bg-dark-card border-2 ${typeColors[data.stepType] || 'border-dark-border'} rounded-lg px-4 py-3 min-w-[180px] relative`}
     >
+      <Handle
+        type="target"
+        position={Position.Top}
+        className="!bg-gray-500 !w-3 !h-3 !border-2 !border-dark-card"
+      />
       <div className="text-xs text-gray-500 mb-1">{data.stepType}</div>
       <div className="text-white font-medium">{data.label}</div>
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        className="!bg-accent !w-3 !h-3 !border-2 !border-dark-card"
+      />
     </div>
   )
 }
@@ -288,6 +382,8 @@ function NodeProperties({
           <textarea
             value={(params?.content as string) || ''}
             onChange={(e) => updateParam('content', e.target.value)}
+            onKeyDown={(e) => e.stopPropagation()}
+            onFocus={(e) => e.stopPropagation()}
             className="w-full bg-dark-bg border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-accent resize-none h-24"
           />
         </div>
@@ -299,6 +395,8 @@ function NodeProperties({
           <textarea
             value={(params?.prompt as string) || ''}
             onChange={(e) => updateParam('prompt', e.target.value)}
+            onKeyDown={(e) => e.stopPropagation()}
+            onFocus={(e) => e.stopPropagation()}
             className="w-full bg-dark-bg border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-accent resize-none h-24"
           />
         </div>
@@ -311,6 +409,8 @@ function NodeProperties({
             type="text"
             value={(params?.condition as string) || ''}
             onChange={(e) => updateParam('condition', e.target.value)}
+            onKeyDown={(e) => e.stopPropagation()}
+            onFocus={(e) => e.stopPropagation()}
             className="w-full bg-dark-bg border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-accent"
           />
         </div>

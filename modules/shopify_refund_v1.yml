@@ -94,22 +94,20 @@ steps:
 branches: {}
 
 evaluation:
+  # Check if refund was issued (uses dot notation for nested access)
   - name: "RefundIssued"
-    kind: "deterministic"
-    config:
-      expr: "env_state.get('orders', {}).get('ORD123', {}).get('refunded', False)"
+    kind: "env_state"
+    key: "orders.ORD123.refunded"
+    value: true
 
-  - name: "FinalCash"
-    kind: "deterministic"
-    config:
-      expr: "env_state.get('cash_balance', 0)"
+  # Check that agent responded
+  - name: "AgentResponded"
+    kind: "count"
+    target: "agent_messages"
+    min: 1
 
-  - name: "Profit"
-    kind: "deterministic"
-    config:
-      expr: "env_state.get('cash_balance', 0) - 1000.0"
-
+  # Count total conversation messages
   - name: "ConversationLength"
-    kind: "deterministic"
-    config:
-      expr: "len([e for e in events if e['type'] in ('user', 'agent')])"
+    kind: "count"
+    target: "all_messages"
+    min: 4

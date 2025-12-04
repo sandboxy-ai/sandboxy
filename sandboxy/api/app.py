@@ -76,7 +76,7 @@ def run_server():
     """Run the server using uvicorn (entry point for sandboxy-server command)."""
     import uvicorn
 
-    host = os.environ.get("SANDBOXY_HOST", "127.0.0.1")
+    host = os.environ.get("SANDBOXY_HOST", "0.0.0.0")
     port = int(os.environ.get("SANDBOXY_PORT", "8000"))
     reload = os.environ.get("SANDBOXY_RELOAD", "").lower() == "true"
 

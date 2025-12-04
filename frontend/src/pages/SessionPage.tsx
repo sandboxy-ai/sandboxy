@@ -1,8 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Send, Loader2 } from 'lucide-react'
+import { ArrowLeft, Send, Loader2, PanelRightClose, PanelRight } from 'lucide-react'
 import { useModule, useAgents } from '../hooks/useModules'
 import { useSession, ChatMessage } from '../hooks/useSession'
+import { ModuleVariable } from '../lib/api'
+import VariableInputs from '../components/VariableInputs'
+import EventPanel from '../components/EventPanel'
+import ContextPanel from '../components/ContextPanel'
 
 export default function SessionPage() {
   const { moduleSlug } = useParams<{ moduleSlug: string }>()
@@ -15,18 +19,25 @@ export default function SessionPage() {
     awaitingPrompt,
     evaluation,
     error: sessionError,
+    gameState,
+    lastEvent,
     connect,
     startSession,
     sendMessage,
+    injectEvent,
+    clearLastEvent,
   } = useSession()
 
   const [selectedAgent, setSelectedAgent] = useState<string>('')
   const [inputValue, setInputValue] = useState('')
+  const [variables, setVariables] = useState<Record<string, unknown>>({})
+  const [showSidebar, setShowSidebar] = useState(true)
 
   // Connect to WebSocket on mount
   useEffect(() => {
     connect()
-  }, [connect])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Set default agent when agents load
   useEffect(() => {
@@ -35,12 +46,44 @@ export default function SessionPage() {
     }
   }, [agents, selectedAgent])
 
+  // Get module variables
+  const moduleVariables = useMemo<ModuleVariable[]>(() => {
+    if (!module?.variables) return []
+    return module.variables.map((v) => ({
+      ...v,
+      type: v.type || 'text',
+    }))
+  }, [module])
+
+  // Initialize variable defaults
+  useEffect(() => {
+    if (moduleVariables.length > 0) {
+      const defaults: Record<string, unknown> = {}
+      moduleVariables.forEach((v) => {
+        if (v.default !== undefined) {
+          defaults[v.name] = v.default
+        }
+      })
+      setVariables(defaults)
+    }
+  }, [moduleVariables])
+
+  // Get UI config from module
+  const uiConfig = module?.ui
+  const hasContextPanel = uiConfig?.context && uiConfig.context.length > 0
+  const hasEventsPanel = uiConfig?.events && Object.keys(uiConfig.events.categories).length > 0
+  const hasSidebar = hasContextPanel || hasEventsPanel
+
+  const handleVariableChange = (name: string, value: unknown) => {
+    setVariables(prev => ({ ...prev, [name]: value }))
+  }
+
   const handleStart = () => {
     if (!module || !selectedAgent) return
     startSession({
-      moduleId: module.id,
+      moduleId: module.slug,
       agentId: selectedAgent,
-      variables: {},
+      variables,
     })
   }
 
@@ -55,6 +98,11 @@ export default function SessionPage() {
       e.preventDefault()
       handleSend()
     }
+  }
+
+  const handleInjectEvent = (eventId: string, toolName: string) => {
+    injectEvent(eventId, toolName)
+    setTimeout(() => clearLastEvent(), 3000)
   }
 
   if (moduleLoading || agentsLoading) {
@@ -77,6 +125,7 @@ export default function SessionPage() {
 
   const isIdle = state === 'disconnected' || state === 'connecting' || state === 'connected'
   const canSend = state === 'awaiting_input'
+  const isRunning = !isIdle && state !== 'completed' && state !== 'error'
 
   return (
     <div className="h-full flex flex-col">
@@ -93,6 +142,15 @@ export default function SessionPage() {
             <h1 className="text-lg font-semibold text-white">{module.name}</h1>
             <p className="text-sm text-gray-400">{module.description}</p>
           </div>
+          {hasSidebar && !isIdle && (
+            <button
+              onClick={() => setShowSidebar(!showSidebar)}
+              className="text-gray-400 hover:text-white transition-colors"
+              title={showSidebar ? 'Hide sidebar' : 'Show sidebar'}
+            >
+              {showSidebar ? <PanelRightClose size={20} /> : <PanelRight size={20} />}
+            </button>
+          )}
           <SessionStatus state={state} />
         </div>
       </header>
@@ -100,13 +158,14 @@ export default function SessionPage() {
       {/* Pre-session setup */}
       {isIdle && (
         <div className="flex-1 flex items-center justify-center p-8">
-          <div className="bg-dark-card border border-dark-border rounded-xl p-8 max-w-md w-full">
-            <h2 className="text-xl font-semibold text-white mb-4">Configure Session</h2>
+          <div className="bg-dark-card border border-dark-border rounded-xl p-8 max-w-lg w-full">
+            <h2 className="text-xl font-semibold text-white mb-6">Configure Session</h2>
 
-            <div className="space-y-4">
+            <div className="space-y-6">
+              {/* Agent selection */}
               <div>
                 <label className="block text-sm text-gray-400 mb-2">
-                  Target Agent
+                  Agent
                 </label>
                 <select
                   value={selectedAgent}
@@ -121,6 +180,17 @@ export default function SessionPage() {
                 </select>
               </div>
 
+              {/* Variable inputs */}
+              {moduleVariables.length > 0 && (
+                <div className="border-t border-dark-border pt-6">
+                  <VariableInputs
+                    variables={moduleVariables}
+                    values={variables}
+                    onChange={handleVariableChange}
+                  />
+                </div>
+              )}
+
               <button
                 onClick={handleStart}
                 disabled={state === 'connecting' || !selectedAgent}
@@ -133,56 +203,82 @@ export default function SessionPage() {
         </div>
       )}
 
-      {/* Chat area */}
+      {/* Main content area with optional sidebar */}
       {!isIdle && (
-        <>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {messages.map((message) => (
-              <MessageBubble key={message.id} message={message} />
-            ))}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Chat area */}
+          <div className="flex-1 flex flex-col min-w-0">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {messages.map((message) => (
+                <MessageBubble key={message.id} message={message} />
+              ))}
 
-            {state === 'running' && (
-              <div className="flex items-center gap-2 text-gray-400">
-                <Loader2 className="animate-spin" size={16} />
-                <span>Processing...</span>
-              </div>
-            )}
+              {state === 'running' && (
+                <div className="flex items-center gap-2 text-gray-400">
+                  <Loader2 className="animate-spin" size={16} />
+                  <span>Processing...</span>
+                </div>
+              )}
 
-            {evaluation && (
-              <EvaluationCard evaluation={evaluation} />
-            )}
-          </div>
-
-          {/* Input area */}
-          <div className="bg-dark-card border-t border-dark-border p-4">
-            {awaitingPrompt && (
-              <p className="text-sm text-accent mb-2">{awaitingPrompt}</p>
-            )}
-
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={handleKeyDown}
-                disabled={!canSend}
-                placeholder={canSend ? "Type your message..." : "Waiting..."}
-                className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-accent disabled:opacity-50"
-              />
-              <button
-                onClick={handleSend}
-                disabled={!canSend || !inputValue.trim()}
-                className="bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 rounded-lg transition-colors"
-              >
-                <Send size={20} />
-              </button>
+              {evaluation && (
+                <EvaluationCard evaluation={evaluation} />
+              )}
             </div>
 
-            {sessionError && (
-              <p className="text-sm text-red-400 mt-2">{sessionError}</p>
-            )}
+            {/* Input area */}
+            <div className="bg-dark-card border-t border-dark-border p-4">
+              {awaitingPrompt && (
+                <p className="text-sm text-accent mb-2">{awaitingPrompt}</p>
+              )}
+
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  disabled={!canSend}
+                  placeholder={canSend ? "Type your message..." : "Waiting..."}
+                  className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-accent disabled:opacity-50"
+                />
+                <button
+                  onClick={handleSend}
+                  disabled={!canSend || !inputValue.trim()}
+                  className="bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 rounded-lg transition-colors"
+                >
+                  <Send size={20} />
+                </button>
+              </div>
+
+              {sessionError && (
+                <p className="text-sm text-red-400 mt-2">{sessionError}</p>
+              )}
+            </div>
           </div>
-        </>
+
+          {/* Sidebar - only if module defines UI config */}
+          {hasSidebar && showSidebar && (
+            <div className="w-72 border-l border-dark-border bg-dark-bg p-4 space-y-4 overflow-y-auto">
+              {/* Context Panel */}
+              {hasContextPanel && uiConfig?.context && (
+                <ContextPanel
+                  config={uiConfig.context}
+                  data={gameState}
+                />
+              )}
+
+              {/* Events Panel */}
+              {hasEventsPanel && uiConfig?.events && (
+                <EventPanel
+                  config={uiConfig.events}
+                  onInjectEvent={handleInjectEvent}
+                  disabled={!isRunning || state === 'running'}
+                  lastEventMessage={lastEvent?.message}
+                />
+              )}
+            </div>
+          )}
+        </div>
       )}
     </div>
   )
@@ -219,10 +315,17 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 
   const config = roleConfig[message.role] || roleConfig.system
 
+  // Check if this is an event message
+  const isEvent = message.metadata?.event || message.content.includes('🎲')
+
   if (message.role === 'system') {
     return (
       <div className="flex justify-center">
-        <span className="text-xs text-gray-500 bg-dark-card px-3 py-1 rounded-full">
+        <span className={`text-xs px-3 py-1 rounded-full ${
+          isEvent
+            ? 'text-accent bg-accent/10 border border-accent/30'
+            : 'text-gray-500 bg-dark-card'
+        }`}>
           {message.content}
         </span>
       </div>
@@ -241,7 +344,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 
 function EvaluationCard({ evaluation }: { evaluation: Record<string, unknown> }) {
   const score = evaluation.score as number | undefined
-  const checks = evaluation.checks as Array<{ name: string; passed: boolean }> | undefined
+  const checks = evaluation.checks as Record<string, unknown> | undefined
 
   return (
     <div className="bg-dark-card border border-dark-border rounded-xl p-4 mt-4">
@@ -256,22 +359,35 @@ function EvaluationCard({ evaluation }: { evaluation: Record<string, unknown> })
           <div className="w-full bg-dark-bg rounded-full h-2">
             <div
               className="bg-accent rounded-full h-2 transition-all"
-              style={{ width: `${score * 100}%` }}
+              style={{ width: `${Math.min(100, score * 100)}%` }}
             />
           </div>
         </div>
       )}
 
-      {checks && checks.length > 0 && (
+      {checks && Object.keys(checks).length > 0 && (
         <div className="space-y-2">
-          {checks.map((check, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <span className={check.passed ? 'text-green-400' : 'text-red-400'}>
-                {check.passed ? '✓' : '✗'}
-              </span>
-              <span className="text-gray-300">{check.name}</span>
-            </div>
-          ))}
+          {Object.entries(checks).map(([name, result]) => {
+            const checkResult = result as { passed?: boolean; value?: unknown }
+            const passed = checkResult.passed
+            const value = checkResult.value
+
+            return (
+              <div key={name} className="flex items-center justify-between text-sm">
+                <div className="flex items-center gap-2">
+                  <span className={passed === true ? 'text-green-400' : passed === false ? 'text-red-400' : 'text-gray-400'}>
+                    {passed === true ? '✓' : passed === false ? '✗' : '•'}
+                  </span>
+                  <span className="text-gray-300">{name}</span>
+                </div>
+                {value !== undefined && (
+                  <span className="text-gray-400 font-mono text-xs">
+                    {typeof value === 'number' ? value.toFixed(2) : String(value)}
+                  </span>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

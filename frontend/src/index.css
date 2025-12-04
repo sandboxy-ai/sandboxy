@@ -57,3 +57,46 @@
 .animate-pulse-orange {
   animation: pulse-orange 2s infinite;
 }
+
+/* Custom slider thumb */
+.slider-thumb::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #f97316;
+  cursor: pointer;
+  border: 2px solid #0a0a0b;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.slider-thumb::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.2);
+}
+
+.slider-thumb::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #f97316;
+  cursor: pointer;
+  border: 2px solid #0a0a0b;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Event flash animation */
+@keyframes eventFlash {
+  0% {
+    background-color: rgba(249, 115, 22, 0.3);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.animate-event-flash {
+  animation: eventFlash 1s ease-out;
+}

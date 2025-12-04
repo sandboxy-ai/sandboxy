@@ -152,6 +152,37 @@ class SessionManager:
 
         session.runner.provide_input(content)
 
+    def inject_event(
+        self,
+        session_id: str,
+        tool_name: str,
+        event_type: str,
+        args: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Inject a game event into a session.
+
+        This triggers an event in the specified tool (e.g., "heatwave" in
+        the lemonade stand). The event modifies game state and returns
+        a description that should be shown to the user/agent.
+
+        Args:
+            session_id: ID of the session.
+            tool_name: Name of the tool to call.
+            event_type: Type of event to trigger.
+            args: Optional additional arguments.
+
+        Returns:
+            The event result data from the tool.
+
+        Raises:
+            ValueError: If session not found or event fails.
+        """
+        session = self.get_session(session_id)
+        if not session:
+            raise ValueError(f"Session not found: {session_id}")
+
+        return session.runner.inject_event(tool_name, event_type, args)
+
     def pause_session(self, session_id: str) -> bool:
         """Pause a session (not fully implemented yet)."""
         session = self.get_session(session_id)

@@ -1,5 +1,63 @@
 const API_BASE = '/api/v1'
 
+export interface ModuleVariable {
+  name: string
+  type: 'slider' | 'select' | 'text' | 'number' | 'boolean'
+  label?: string
+  description?: string
+  default?: string | number | boolean
+  min?: number
+  max?: number
+  step?: number
+  options?: Array<{ value: string; label: string }>
+}
+
+export interface ModuleTool {
+  name: string
+  type: string
+  description?: string
+  config?: Record<string, unknown>
+}
+
+export interface ModuleEnvironment {
+  sandbox_type?: string
+  tools?: ModuleTool[]
+  initial_state?: Record<string, unknown>
+}
+
+export interface ModuleMetadata {
+  category?: string
+  tags?: string[]
+}
+
+// UI Configuration from YAML
+export interface ContextFieldConfig {
+  key: string           // Path to value in state (e.g., "inventory.cups_ready")
+  label: string         // Display label
+  format: 'text' | 'number' | 'currency' | 'progress'
+  icon?: string         // Emoji or icon
+  max?: number          // For progress bars
+  warn_below?: number   // Show warning if value below this
+  warn_above?: number   // Show warning if value above this
+}
+
+export interface EventConfig {
+  id: string
+  label: string
+  icon?: string
+  description?: string
+}
+
+export interface EventsConfig {
+  tool: string          // Which tool handles trigger_event
+  categories: Record<string, EventConfig[]>
+}
+
+export interface ModuleUI {
+  context?: ContextFieldConfig[]
+  events?: EventsConfig
+}
+
 export interface Module {
   id: string
   slug: string
@@ -10,6 +68,11 @@ export interface Module {
   yaml_content: string
   created_at: string
   updated_at: string
+  // Parsed from YAML
+  variables?: ModuleVariable[]
+  environment?: ModuleEnvironment
+  metadata?: ModuleMetadata
+  ui?: ModuleUI
 }
 
 export interface Agent {
