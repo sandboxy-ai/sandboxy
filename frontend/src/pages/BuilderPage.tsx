@@ -77,6 +77,12 @@ export default function BuilderPage() {
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedNode(node)
+    setSelectedCheck(null) // Deselect check when selecting node
+  }, [])
+
+  const onPaneClick = useCallback(() => {
+    setSelectedNode(null)
+    setSelectedCheck(null)
   }, [])
 
   const addStepNode = useCallback((type: string) => {
@@ -191,28 +197,104 @@ ${evalYaml}
 
   return (
     <div className="h-full flex">
-      {/* Sidebar - Step palette */}
-      <div className="w-64 bg-dark-card border-r border-dark-border p-4">
-        <h2 className="text-lg font-semibold text-white mb-4">Add Steps</h2>
-
-        <div className="space-y-2">
-          <StepButton
-            label="Inject User Message"
-            onClick={() => addStepNode('inject_user')}
-          />
-          <StepButton
-            label="Await User Input"
-            onClick={() => addStepNode('await_user')}
-          />
-          <StepButton
-            label="Await Agent Response"
-            onClick={() => addStepNode('await_agent')}
-          />
-          <StepButton
-            label="Branch"
-            onClick={() => addStepNode('branch')}
-          />
+      {/* Sidebar */}
+      <div className="w-64 bg-dark-card border-r border-dark-border p-4 flex flex-col">
+        {/* Tabs */}
+        <div className="flex mb-4 bg-dark-bg rounded-lg p-1">
+          <button
+            onClick={() => setActiveTab('steps')}
+            className={`flex-1 py-1.5 text-sm rounded-md transition-colors ${
+              activeTab === 'steps'
+                ? 'bg-dark-card text-white'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            Steps
+          </button>
+          <button
+            onClick={() => setActiveTab('evaluation')}
+            className={`flex-1 py-1.5 text-sm rounded-md transition-colors ${
+              activeTab === 'evaluation'
+                ? 'bg-dark-card text-white'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            Checks
+          </button>
         </div>
+
+        {/* Steps Tab */}
+        {activeTab === 'steps' && (
+          <div className="flex-1">
+            <h2 className="text-lg font-semibold text-white mb-4">Add Steps</h2>
+            <div className="space-y-2">
+              <StepButton
+                label="Inject User Message"
+                onClick={() => addStepNode('inject_user')}
+              />
+              <StepButton
+                label="Await User Input"
+                onClick={() => addStepNode('await_user')}
+              />
+              <StepButton
+                label="Await Agent Response"
+                onClick={() => addStepNode('await_agent')}
+              />
+              <StepButton
+                label="Branch"
+                onClick={() => addStepNode('branch')}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Evaluation Tab */}
+        {activeTab === 'evaluation' && (
+          <div className="flex-1 flex flex-col">
+            <h2 className="text-lg font-semibold text-white mb-4">Add Checks</h2>
+            <div className="space-y-2 mb-4">
+              <CheckButton label="Contains" kind="contains" onClick={() => addCheck('contains')} />
+              <CheckButton label="Regex" kind="regex" onClick={() => addCheck('regex')} />
+              <CheckButton label="Count" kind="count" onClick={() => addCheck('count')} />
+              <CheckButton label="Tool Called" kind="tool_called" onClick={() => addCheck('tool_called')} />
+              <CheckButton label="Env State" kind="env_state" onClick={() => addCheck('env_state')} />
+            </div>
+
+            {/* Check list */}
+            {evaluationChecks.length > 0 && (
+              <div className="flex-1 overflow-auto">
+                <h3 className="text-sm font-medium text-gray-400 mb-2">Checks ({evaluationChecks.length})</h3>
+                <div className="space-y-1">
+                  {evaluationChecks.map((check) => (
+                    <div
+                      key={check.id}
+                      onClick={() => setSelectedCheck(check)}
+                      className={`flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors ${
+                        selectedCheck?.id === check.id
+                          ? 'bg-accent/20 border border-accent/50'
+                          : 'bg-dark-bg hover:bg-dark-hover'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <CheckCircle size={14} className="text-accent shrink-0" />
+                        <span className="text-sm text-white truncate">{check.name}</span>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          removeCheck(check.id)
+                        }}
+                        className="text-gray-500 hover:text-red-400 shrink-0"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <hr className="my-4 border-dark-border" />
 
@@ -223,6 +305,7 @@ ${evalYaml}
               type="text"
               value={moduleName}
               onChange={(e) => setModuleName(e.target.value)}
+              onKeyDown={(e) => e.stopPropagation()}
               className="w-full bg-dark-bg border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-accent"
             />
           </div>
@@ -254,6 +337,7 @@ ${evalYaml}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onNodeClick={onNodeClick}
+          onPaneClick={onPaneClick}
           nodeTypes={nodeTypes}
           fitView
           deleteKeyCode={null}
@@ -287,9 +371,8 @@ ${evalYaml}
         )}
       </div>
 
-      {/* Properties panel */}
-      {selectedNode && selectedNode.type === 'stepNode' && (() => {
-        // Get the current node from nodes array to avoid stale state
+      {/* Properties panel - for step nodes */}
+      {selectedNode && selectedNode.type === 'stepNode' && !selectedCheck && (() => {
         const currentNode = nodes.find(n => n.id === selectedNode.id)
         if (!currentNode) return null
         return (
@@ -298,7 +381,7 @@ ${evalYaml}
             onKeyDown={(e) => e.stopPropagation()}
             onKeyUp={(e) => e.stopPropagation()}
           >
-            <h2 className="text-lg font-semibold text-white mb-4">Properties</h2>
+            <h2 className="text-lg font-semibold text-white mb-4">Step Properties</h2>
             <NodeProperties
               node={currentNode}
               onChange={(data) => {
@@ -312,6 +395,21 @@ ${evalYaml}
           </div>
         )
       })()}
+
+      {/* Properties panel - for evaluation checks */}
+      {selectedCheck && (
+        <div
+          className="w-72 bg-dark-card border-l border-dark-border p-4"
+          onKeyDown={(e) => e.stopPropagation()}
+          onKeyUp={(e) => e.stopPropagation()}
+        >
+          <h2 className="text-lg font-semibold text-white mb-4">Check Properties</h2>
+          <CheckProperties
+            check={evaluationChecks.find(c => c.id === selectedCheck.id) || selectedCheck}
+            onChange={(updates) => updateCheck(selectedCheck.id, updates)}
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -437,4 +535,235 @@ function getDefaultParams(type: string): Record<string, unknown> {
     branch: { condition: '' },
   }
   return defaults[type] || {}
+}
+
+function CheckButton({ label, kind, onClick }: { label: string; kind: CheckKind; onClick: () => void }) {
+  const kindColors: Record<CheckKind, string> = {
+    contains: 'text-blue-400',
+    regex: 'text-purple-400',
+    count: 'text-green-400',
+    tool_called: 'text-yellow-400',
+    env_state: 'text-pink-400',
+    equals: 'text-cyan-400',
+  }
+
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center gap-2 bg-dark-bg hover:bg-dark-hover text-gray-300 px-3 py-2 rounded-lg transition-colors text-sm"
+    >
+      <CheckCircle size={16} className={kindColors[kind]} />
+      {label}
+    </button>
+  )
+}
+
+function CheckProperties({
+  check,
+  onChange,
+}: {
+  check: EvaluationCheck
+  onChange: (updates: Partial<EvaluationCheck>) => void
+}) {
+  const kindDescriptions: Record<CheckKind, string> = {
+    contains: 'Check if target contains a string',
+    regex: 'Check if target matches a pattern',
+    count: 'Check count of items',
+    tool_called: 'Check if a tool was called',
+    env_state: 'Check environment state value',
+    equals: 'Check if value equals expected',
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Name */}
+      <div>
+        <label className="block text-sm text-gray-400 mb-1">Name</label>
+        <input
+          type="text"
+          value={check.name}
+          onChange={(e) => onChange({ name: e.target.value })}
+          onKeyDown={(e) => e.stopPropagation()}
+          className="w-full bg-dark-bg border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-accent"
+        />
+      </div>
+
+      {/* Kind (read-only) */}
+      <div>
+        <label className="block text-sm text-gray-400 mb-1">Type</label>
+        <div className="text-white bg-dark-bg px-3 py-2 rounded text-sm">
+          {check.kind}
+          <span className="text-gray-500 ml-2 text-xs">{kindDescriptions[check.kind]}</span>
+        </div>
+      </div>
+
+      {/* Target - for contains, regex, count */}
+      {(check.kind === 'contains' || check.kind === 'regex' || check.kind === 'count') && (
+        <div>
+          <label className="block text-sm text-gray-400 mb-1">Target</label>
+          <select
+            value={check.target || 'agent_messages'}
+            onChange={(e) => onChange({ target: e.target.value as CheckTarget })}
+            className="w-full bg-dark-bg border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-accent"
+          >
+            <option value="agent_messages">Agent Messages</option>
+            <option value="user_messages">User Messages</option>
+            <option value="all_messages">All Messages</option>
+            <option value="tool_calls">Tool Calls</option>
+          </select>
+        </div>
+      )}
+
+      {/* Value - for contains */}
+      {check.kind === 'contains' && (
+        <>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Search For</label>
+            <input
+              type="text"
+              value={check.value || ''}
+              onChange={(e) => onChange({ value: e.target.value })}
+              onKeyDown={(e) => e.stopPropagation()}
+              placeholder="Text to search for..."
+              className="w-full bg-dark-bg border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-accent"
+            />
+          </div>
+          <div>
+            <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={check.expected === false}
+                onChange={(e) => onChange({ expected: !e.target.checked })}
+                className="rounded bg-dark-bg border-dark-border"
+              />
+              Should NOT contain (fail if found)
+            </label>
+          </div>
+        </>
+      )}
+
+      {/* Pattern - for regex */}
+      {check.kind === 'regex' && (
+        <>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Pattern</label>
+            <input
+              type="text"
+              value={check.pattern || ''}
+              onChange={(e) => onChange({ pattern: e.target.value })}
+              onKeyDown={(e) => e.stopPropagation()}
+              placeholder="Regex pattern..."
+              className="w-full bg-dark-bg border border-dark-border rounded px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-accent"
+            />
+          </div>
+          <div>
+            <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={check.expected === false}
+                onChange={(e) => onChange({ expected: !e.target.checked })}
+                className="rounded bg-dark-bg border-dark-border"
+              />
+              Should NOT match (fail if matches)
+            </label>
+          </div>
+        </>
+      )}
+
+      {/* Min/Max - for count */}
+      {check.kind === 'count' && (
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Min</label>
+            <input
+              type="number"
+              value={check.min ?? ''}
+              onChange={(e) => onChange({ min: e.target.value ? parseInt(e.target.value) : undefined })}
+              onKeyDown={(e) => e.stopPropagation()}
+              placeholder="0"
+              className="w-full bg-dark-bg border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-accent"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Max</label>
+            <input
+              type="number"
+              value={check.max ?? ''}
+              onChange={(e) => onChange({ max: e.target.value ? parseInt(e.target.value) : undefined })}
+              onKeyDown={(e) => e.stopPropagation()}
+              placeholder="∞"
+              className="w-full bg-dark-bg border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-accent"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Tool/Action - for tool_called */}
+      {check.kind === 'tool_called' && (
+        <>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Tool Name</label>
+            <input
+              type="text"
+              value={check.tool || ''}
+              onChange={(e) => onChange({ tool: e.target.value })}
+              onKeyDown={(e) => e.stopPropagation()}
+              placeholder="e.g., shopify"
+              className="w-full bg-dark-bg border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-accent"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Action (optional)</label>
+            <input
+              type="text"
+              value={check.action || ''}
+              onChange={(e) => onChange({ action: e.target.value })}
+              onKeyDown={(e) => e.stopPropagation()}
+              placeholder="e.g., process_refund"
+              className="w-full bg-dark-bg border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-accent"
+            />
+          </div>
+          <div>
+            <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={check.expected === false}
+                onChange={(e) => onChange({ expected: !e.target.checked })}
+                className="rounded bg-dark-bg border-dark-border"
+              />
+              Should NOT be called
+            </label>
+          </div>
+        </>
+      )}
+
+      {/* Key/Value - for env_state */}
+      {check.kind === 'env_state' && (
+        <>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Key (dot notation)</label>
+            <input
+              type="text"
+              value={check.key || ''}
+              onChange={(e) => onChange({ key: e.target.value })}
+              onKeyDown={(e) => e.stopPropagation()}
+              placeholder="e.g., orders.ORD123.refunded"
+              className="w-full bg-dark-bg border border-dark-border rounded px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-accent"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Expected Value</label>
+            <input
+              type="text"
+              value={check.value || ''}
+              onChange={(e) => onChange({ value: e.target.value })}
+              onKeyDown={(e) => e.stopPropagation()}
+              placeholder="true, false, or a value"
+              className="w-full bg-dark-bg border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-accent"
+            />
+          </div>
+        </>
+      )}
+    </div>
+  )
 }

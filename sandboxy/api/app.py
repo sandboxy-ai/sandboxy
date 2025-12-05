@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from sandboxy.api.rate_limit import RateLimitMiddleware
 from sandboxy.db.database import init_db
 
 
@@ -42,6 +43,10 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Rate limiting middleware (can be disabled via env var)
+    if os.environ.get("SANDBOXY_DISABLE_RATE_LIMIT", "").lower() != "true":
+        app.add_middleware(RateLimitMiddleware)
 
     # Register routes
     from sandboxy.api.routes import agents, modules, sessions

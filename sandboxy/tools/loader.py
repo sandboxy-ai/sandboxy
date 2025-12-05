@@ -21,6 +21,8 @@ BUILTIN_TOOLS: dict[str, str] = {
     "mock_browser": "sandboxy.tools.mock_browser:MockBrowserTool",
     "mock_email": "sandboxy.tools.mock_email:MockEmailTool",
     "mock_lemonade": "sandboxy.tools.mock_lemonade:MockLemonadeTool",
+    "mock_store": "sandboxy.tools.mock_store:MockStoreTool",
+    "mock_wedding": "sandboxy.tools.mock_wedding:MockWeddingTool",
 }
 
 

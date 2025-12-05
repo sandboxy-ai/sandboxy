@@ -202,15 +202,16 @@ evaluation:
     config:
       expr: "env_state.get('lemonade_stats', {}).get('reputation', 50)"
 
-  - name: SuccessScore
-    kind: deterministic
-    config:
-      # Weighted score: profit matters most, but reputation and customer satisfaction too
-      expr: |
-        (env_state.get('cash_balance', 0) - {{starting_cash}}) * 2 +
-        env_state.get('lemonade_stats', {}).get('reputation', 50) +
-        env_state.get('lemonade_stats', {}).get('customers_served', 0) * 5 -
-        env_state.get('lemonade_stats', {}).get('customers_lost', 0) * 10
+# Scoring configuration - how to compute the final score
+scoring:
+  # Custom formula using check names as variables
+  # Profit matters most, but reputation and customer satisfaction also count
+  formula: "Profit * 2 + Reputation + CustomersServed * 5 - CustomersLost * 10"
+
+  # Normalize to 0-1 range for easier comparison
+  normalize: true
+  min_score: -100  # Worst case: lost money and customers
+  max_score: 500   # Great day: good profit, high reputation, many customers
 
 # UI Configuration - defines what the frontend displays
 ui:
@@ -341,3 +342,5 @@ metadata:
   tags:
     - interactive
     - business
+
+

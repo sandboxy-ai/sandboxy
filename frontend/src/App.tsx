@@ -1,4 +1,5 @@
 import { Routes, Route, useParams } from 'react-router-dom'
+import LandingPage from './pages/LandingPage'
 import HomePage from './pages/HomePage'
 import SessionPage from './pages/SessionPage'
 import BuilderPage from './pages/BuilderPage'
@@ -14,7 +15,8 @@ function App() {
   return (
     <Layout>
       <Routes>
-        <Route path="/" element={<HomePage />} />
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/scenarios" element={<HomePage />} />
         <Route path="/session/:moduleSlug" element={<SessionPageWrapper />} />
         <Route path="/builder" element={<BuilderPage />} />
         <Route path="/builder/:moduleSlug" element={<BuilderPage />} />

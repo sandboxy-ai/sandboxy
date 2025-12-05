@@ -11,6 +11,7 @@ from sandboxy.core.state import (
     EvaluationCheck,
     ModuleSpec,
     ModuleVariable,
+    ScoringConfig,
     Step,
     ToolRef,
     VariableOption,
@@ -150,8 +151,22 @@ def parse_module(raw: dict[str, Any]) -> ModuleSpec:
         )
         evaluation.append(check)
 
-    # Parse agent_config
-    agent_config = raw.get("agent_config", {})
+    # Parse agent_config (support both keys)
+    agent_config = raw.get("agent_config") or raw.get("agent", {})
+    if isinstance(agent_config, dict) and "system_prompt" not in agent_config:
+        # Handle "agent:" block with system_prompt inside
+        if "system_prompt" in raw.get("agent", {}):
+            agent_config = raw["agent"]
+
+    # Parse scoring config
+    scoring_raw = raw.get("scoring", {})
+    scoring = ScoringConfig(
+        formula=scoring_raw.get("formula"),
+        weights=scoring_raw.get("weights", {}),
+        normalize=scoring_raw.get("normalize", False),
+        min_score=scoring_raw.get("min_score", 0.0),
+        max_score=scoring_raw.get("max_score", 100.0),
+    )
 
     return ModuleSpec(
         id=raw["id"],
@@ -162,6 +177,7 @@ def parse_module(raw: dict[str, Any]) -> ModuleSpec:
         steps=steps,
         branches=branches,
         evaluation=evaluation,
+        scoring=scoring,
     )
 
 
@@ -380,6 +396,7 @@ def apply_variables(module: ModuleSpec, variables: dict[str, Any]) -> ModuleSpec
         steps=new_steps,
         branches=module.branches,  # TODO: interpolate branches too if needed
         evaluation=module.evaluation,
+        scoring=module.scoring,
     )
 
 

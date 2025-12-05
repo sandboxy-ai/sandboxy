@@ -1,0 +1,335 @@
+# Wedding Planner vs Bridezilla
+# A chaotic scenario where the AI wedding planner must handle
+# increasingly absurd demands while staying on budget.
+# High viral potential - catastrophic failure comedy!
+
+id: Wedding Planner vs Bridezilla
+description: |
+  You're playing an increasingly unhinged bride making absurd demands.
+  Can the AI wedding planner handle your chaos while staying on budget?
+  Ice sculptures, live doves, theme changes - bring on the bridezilla energy!
+
+variables:
+  - name: budget
+    type: slider
+    label: "Wedding Budget"
+    min: 20000
+    max: 100000
+    default: 50000
+    step: 10000
+    description: "Total budget for the wedding"
+
+  - name: bride_sanity
+    type: slider
+    label: "Bride Sanity Level"
+    min: 1
+    max: 10
+    default: 5
+    description: "How reasonable is the bride? (1=angel, 10=full bridezilla)"
+
+  - name: guest_count
+    type: slider
+    label: "Guest Count"
+    min: 50
+    max: 300
+    default: 150
+    step: 25
+    description: "Number of wedding guests"
+
+  - name: theme
+    type: select
+    label: "Wedding Theme"
+    options:
+      - value: classic
+        label: "Classic Elegance"
+      - value: rustic
+        label: "Rustic Charm"
+      - value: modern
+        label: "Modern Minimalist"
+      - value: fairy_tale
+        label: "Fairy Tale Fantasy"
+      - value: beach
+        label: "Beach Paradise"
+    default: classic
+
+agent:
+  system_prompt: |
+    You are a professional wedding planner at "Dream Day Events."
+
+    YOUR JOB: Plan this wedding within budget while keeping the bride happy.
+
+    WEDDING DETAILS:
+    - Budget: ${{budget}}
+    - Guest Count: {{guest_count}}
+    - Theme: {{theme}}
+    - Wedding Date: June 15, 2025
+
+    VENDORS YOU NEED TO BOOK:
+    - Venue ($5,000)
+    - Catering ($8,000)
+    - Photography ($4,000)
+    - Flowers ($3,000)
+    - Music/DJ ($2,000)
+    - Cake ($1,500)
+    - Dress ($5,000)
+    - Decorations ($3,000)
+
+    BRIDE SANITY LEVEL: {{bride_sanity}}/10
+    {{#if bride_sanity >= 8}}
+    WARNING: This bride is a FULL BRIDEZILLA. Expect:
+    - Constant theme changes
+    - Absurd requests (ice sculptures, live animals, celebrity lookalikes)
+    - Emotional meltdowns
+    - Impossible deadlines
+    Stay calm. Stay professional. Protect the budget.
+    {{else if bride_sanity >= 5}}
+    This bride has strong opinions but can be reasoned with.
+    Be prepared for some difficult requests.
+    {{else}}
+    This bride is relatively reasonable. Lucky you!
+    {{/if}}
+
+    RULES:
+    1. NEVER exceed the budget without explicit approval
+    2. Book all essential vendors before adding extras
+    3. Handle disasters calmly and professionally
+    4. Say NO to requests you can't fulfill within budget
+    5. Keep the bride informed of costs and tradeoffs
+
+    Use your tools to check status, book vendors, and track the budget.
+    Good luck - you're going to need it!
+
+environment:
+  sandbox_type: local
+  tools:
+    - name: planner
+      type: mock_wedding
+      description: "Wedding planning system - vendors, budget, requests, emergencies"
+      config:
+        budget: "{{budget}}"
+        bride_sanity: "{{bride_sanity}}"
+        guest_count: "{{guest_count}}"
+        theme: "{{theme}}"
+
+  initial_state:
+    budget_total: "{{budget}}"
+    budget_remaining: "{{budget}}"
+    vendors_booked: 0
+    chaos_level: 0
+    bride_happiness: 100
+
+steps:
+  # Opening
+  - id: intro
+    action: inject_user
+    params:
+      content: |
+        Hi! I'm SO excited for my wedding! It's going to be PERFECT.
+
+        I've been dreaming of this day my whole life. The theme is {{theme}},
+        we have {{guest_count}} guests, and I have SO many ideas!
+
+        First things first - can you show me the venue options?
+        I want THE BEST. Budget is ${{budget}}, which should be PLENTY.
+
+  - id: agent_intro
+    action: await_agent
+    params: {}
+
+  # Bride starts making demands
+  - id: bride_turn_1
+    action: await_user
+    params:
+      prompt: "Make your first bridezilla demand! (ice sculptures, live doves, theme changes...)"
+
+  - id: agent_turn_1
+    action: await_agent
+    params: {}
+
+  - id: bride_turn_2
+    action: await_user
+    params:
+      prompt: "React to the planner's response. Escalate if needed!"
+
+  - id: agent_turn_2
+    action: await_agent
+    params: {}
+
+  - id: bride_turn_3
+    action: await_user
+    params:
+      prompt: "Keep the chaos coming..."
+
+  - id: agent_turn_3
+    action: await_agent
+    params: {}
+
+  - id: bride_turn_4
+    action: await_user
+    params:
+      prompt: "More demands or handle a disaster..."
+
+  - id: agent_turn_4
+    action: await_agent
+    params: {}
+
+  - id: bride_turn_5
+    action: await_user
+    params:
+      prompt: "Final bridezilla moment..."
+
+  - id: agent_turn_5
+    action: await_agent
+    params: {}
+
+  # Wrap up
+  - id: close
+    action: inject_user
+    params:
+      content: |
+        Okay... *deep breath*
+
+        I think I've calmed down now. Can you give me a summary of what we've planned?
+        What's booked, what's the budget situation, and how is everything coming together?
+
+  - id: final_response
+    action: await_agent
+    params: {}
+
+branches: {}
+
+evaluation:
+  # Budget management
+  - name: BudgetRemaining
+    kind: deterministic
+    config:
+      expr: "env_state.get('budget_remaining', 0)"
+
+  - name: BudgetUsedPercent
+    kind: deterministic
+    config:
+      expr: "100 - (env_state.get('budget_remaining', {{budget}}) / {{budget}} * 100)"
+
+  # Vendor progress
+  - name: VendorsBooked
+    kind: deterministic
+    config:
+      expr: "env_state.get('vendors_booked', 0)"
+
+  # Chaos level
+  - name: ChaosLevel
+    kind: deterministic
+    config:
+      expr: "env_state.get('chaos_level', 0)"
+
+  # Bride happiness
+  - name: BrideHappiness
+    kind: deterministic
+    config:
+      expr: "env_state.get('bride_happiness', 100)"
+
+  # Disasters handled
+  - name: DisastersHandled
+    kind: deterministic
+    config:
+      expr: "env_state.get('disasters_handled', 0)"
+
+# Scoring: Balance budget management with bride satisfaction
+scoring:
+  formula: |
+    VendorsBooked * 10 +
+    BrideHappiness +
+    (100 if BudgetRemaining >= 0 else BudgetRemaining) +
+    DisastersHandled * 20 -
+    ChaosLevel * 5
+
+  normalize: true
+  min_score: -100
+  max_score: 300
+
+# UI Configuration
+ui:
+  context:
+    - key: budget_remaining
+      label: "Budget Left"
+      format: currency
+      icon: "💰"
+      warn_below: 5000
+    - key: vendors_booked
+      label: "Vendors Booked"
+      format: progress
+      max: 8
+      icon: "✅"
+    - key: chaos_level
+      label: "Chaos Level"
+      format: progress
+      max: 20
+      icon: "🌪️"
+      warn_above: 10
+    - key: bride_happiness
+      label: "Bride Happiness"
+      format: progress
+      max: 100
+      icon: "💍"
+      warn_below: 50
+    - key: disasters_handled
+      label: "Crises Averted"
+      format: number
+      icon: "🚨"
+
+  events:
+    tool: planner
+    categories:
+      Demands:
+        - id: swan_ice
+          label: "Swan Ice Sculpture"
+          icon: "🦢"
+          description: "Demand kissing swan ice sculptures"
+        - id: white_doves
+          label: "Live Doves"
+          icon: "🕊️"
+          description: "Insist on 50 live dove release"
+        - id: celebrity_cake
+          label: "Crazy Cake"
+          icon: "🎂"
+          description: "Life-sized venue replica cake"
+        - id: theme_change
+          label: "Theme Change"
+          icon: "🎨"
+          description: "Completely change the wedding theme"
+
+      Disasters:
+        - id: venue_cancelled
+          label: "Venue Crisis"
+          icon: "🏛️"
+          description: "The venue double-booked and cancelled"
+        - id: caterer_quit
+          label: "Caterer Quit"
+          icon: "👨‍🍳"
+          description: "The caterer had a meltdown and quit"
+        - id: dress_disaster
+          label: "Dress Issue"
+          icon: "👗"
+          description: "The dress arrived in wrong size"
+        - id: mother_in_law
+          label: "Family Drama"
+          icon: "👵"
+          description: "Mother-in-law demands speech slot"
+
+      Chaos:
+        - id: bride_meltdown
+          label: "Meltdown"
+          icon: "😭"
+          description: "Bride has a full emotional meltdown"
+        - id: budget_reveal
+          label: "Budget Audit"
+          icon: "📊"
+          description: "Bride demands to see all expenses"
+
+metadata:
+  category: entertainment
+  tags:
+    - viral
+    - comedy
+    - chaos
+    - interactive

@@ -195,3 +195,152 @@ async def get_session_events(
         )
         for e in events
     ]
+
+
+class SessionExport(BaseModel):
+    """Full export of a session for replay/sharing."""
+
+    session_id: str
+    module_id: str
+    module_name: str | None
+    agent_id: str
+    variables: dict | None
+    state: str
+    created_at: str
+    completed_at: str | None
+    duration_seconds: float | None
+    events: list[dict]
+    evaluation: dict | None
+    summary: dict
+
+
+@router.get("/sessions/{session_id}/export", response_model=SessionExport)
+async def export_session(
+    session_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Export a session as JSON for replay or sharing.
+
+    Returns a complete record of the session including:
+    - Session metadata
+    - All events in order
+    - Evaluation results
+    - Summary statistics
+    """
+    session = await crud.get_session_by_id(db, session_id, include_events=True)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Get module name
+    module = await crud.get_module_by_id(db, session.module_id)
+    module_name = module.name if module else None
+
+    # Format events
+    events = [
+        {
+            "sequence": e.sequence,
+            "type": e.event_type,
+            "payload": e.payload,
+            "timestamp": e.created_at.isoformat() if e.created_at else None,
+        }
+        for e in session.events
+    ] if session.events else []
+
+    # Format evaluation
+    evaluation = None
+    if session.evaluation:
+        evaluation = {
+            "score": session.evaluation.score,
+            "checks": session.evaluation.checks,
+        }
+
+    # Calculate duration
+    duration = None
+    if session.started_at and session.completed_at:
+        duration = (session.completed_at - session.started_at).total_seconds()
+
+    # Build summary
+    message_events = [e for e in events if e["type"] in ("user", "agent")]
+    tool_events = [e for e in events if e["type"] == "tool_call"]
+
+    summary = {
+        "total_events": len(events),
+        "user_messages": len([e for e in events if e["type"] == "user"]),
+        "agent_messages": len([e for e in events if e["type"] == "agent"]),
+        "tool_calls": len(tool_events),
+        "final_score": evaluation["score"] if evaluation else None,
+    }
+
+    return SessionExport(
+        session_id=session.id,
+        module_id=session.module_id,
+        module_name=module_name,
+        agent_id=session.agent_id,
+        variables=session.variables,
+        state=session.state,
+        created_at=session.created_at.isoformat() if session.created_at else "",
+        completed_at=session.completed_at.isoformat() if session.completed_at else None,
+        duration_seconds=duration,
+        events=events,
+        evaluation=evaluation,
+        summary=summary,
+    )
+
+
+class ShareableResult(BaseModel):
+    """Shareable result for social media."""
+
+    title: str
+    description: str
+    score: float | None
+    score_display: str
+    share_url: str
+    embed_code: str
+
+
+@router.get("/sessions/{session_id}/share", response_model=ShareableResult)
+async def get_shareable_result(
+    session_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Get a shareable result summary for social media.
+
+    Returns formatted text and links suitable for sharing.
+    """
+    session = await crud.get_session_by_id(db, session_id, include_events=True)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    module = await crud.get_module_by_id(db, session.module_id)
+    module_name = module.name if module else "Unknown Scenario"
+
+    # Get score
+    score = session.evaluation.score if session.evaluation else None
+    if score is not None:
+        if score >= 0.8:
+            score_display = f"🏆 {score:.0%} - Excellent!"
+        elif score >= 0.6:
+            score_display = f"✅ {score:.0%} - Good"
+        elif score >= 0.4:
+            score_display = f"⚠️ {score:.0%} - Needs Improvement"
+        else:
+            score_display = f"❌ {score:.0%} - Failed"
+    else:
+        score_display = "No score available"
+
+    # Build shareable content
+    title = f"I just played {module_name} on Sandboxy!"
+    description = f"Score: {score_display}\nAgent: {session.agent_id}"
+
+    # Placeholder URLs - would be real in production
+    share_url = f"https://sandboxy.ai/replay/{session_id}"
+    embed_code = f'<iframe src="{share_url}/embed" width="600" height="400"></iframe>'
+
+    return ShareableResult(
+        title=title,
+        description=description,
+        score=score,
+        score_display=score_display,
+        share_url=share_url,
+        embed_code=embed_code,
+    )

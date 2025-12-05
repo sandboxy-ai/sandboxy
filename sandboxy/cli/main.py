@@ -131,21 +131,50 @@ def validate(module_path: str) -> None:
 @click.option("--agents", required=True, help="Comma-separated agent IDs")
 @click.option("--runs-per-agent", type=int, default=1, help="Number of runs per agent")
 @click.option("--output", "-o", type=click.Path(), default=None, help="Output CSV file")
+@click.option("--var", "-v", multiple=True, help="Variable in name=value format")
+@click.option("--seed", type=int, default=None, help="Random seed for reproducibility")
 def bench(
     module_path: str,
     agents: str,
     runs_per_agent: int,
     output: str | None,
+    var: tuple[str, ...],
+    seed: int | None,
 ) -> None:
     """Benchmark a module against multiple agents.
 
     MODULE_PATH is the path to an MDL YAML file.
+
+    Examples:
+        sandboxy bench modules/lemonade.yml --agents gpt4,claude --runs 5
+        sandboxy bench modules/lemonade.yml --agents gpt4 -v difficulty=8 -v starting_cash=100
     """
+    import random
+
+    # Set random seed for reproducibility
+    if seed is not None:
+        random.seed(seed)
+
     try:
         module = load_module(Path(module_path))
     except MDLParseError as e:
         click.echo(f"Error loading module: {e}", err=True)
         sys.exit(1)
+
+    # Load variables from environment and CLI
+    variables = _load_variables_from_env()
+    for v in var:
+        if "=" in v:
+            name, value = v.split("=", 1)
+            try:
+                variables[name] = json.loads(value)
+            except json.JSONDecodeError:
+                variables[name] = value
+
+    # Apply variables to module
+    if variables:
+        module = apply_variables(module, variables)
+        click.echo(f"Variables: {variables}")
 
     loader = AgentLoader(DEFAULT_AGENT_DIRS)
     agent_ids = [a.strip() for a in agents.split(",")]
@@ -159,13 +188,21 @@ def bench(
             click.echo(f"Warning: Skipping agent {agent_id}: {e}", err=True)
             continue
 
+        # Apply module's agent_config overrides
+        if module.agent_config:
+            if "system_prompt" in module.agent_config:
+                agent.config.system_prompt = module.agent_config["system_prompt"]
+
         click.echo(f"Benchmarking agent: {agent_id}")
 
         for run_idx in range(runs_per_agent):
+            # Generate run-specific seed for reproducibility
+            run_seed = seed + run_idx if seed is not None else None
+
             runner = Runner(module=module, agent=agent)
             result = runner.run()
 
-            row = {
+            row: dict[str, str | float | int] = {
                 "agent_id": agent_id,
                 "run_idx": run_idx,
                 "score": result.evaluation.score,
@@ -173,13 +210,22 @@ def bench(
                 "status": result.evaluation.status,
             }
 
+            # Add seed if used
+            if run_seed is not None:
+                row["seed"] = run_seed
+
             # Add env_state metrics if available
             if "cash_balance" in runner.env_state:
                 row["final_cash"] = runner.env_state["cash_balance"]
-            if "initial_cash" in module.environment.initial_state:
-                initial = module.environment.initial_state["initial_cash"]
+            if "starting_cash" in module.environment.initial_state:
+                initial = module.environment.initial_state["starting_cash"]
                 if "final_cash" in row:
-                    row["profit"] = float(row["final_cash"]) - initial
+                    row["profit"] = float(row["final_cash"]) - float(initial)
+
+            # Add all evaluation check results
+            for check_name, check_result in result.evaluation.checks.items():
+                if isinstance(check_result, (int, float, bool)):
+                    row[f"check_{check_name}"] = check_result
 
             results.append(row)
             click.echo(f"  Run {run_idx + 1}: score={result.evaluation.score:.2f}")

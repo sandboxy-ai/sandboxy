@@ -182,6 +182,52 @@ class ApiClient {
   async getSessionEvents(sessionId: string): Promise<SessionEvent[]> {
     return this.request<SessionEvent[]>(`/sessions/${sessionId}/events`)
   }
+
+  async exportSession(sessionId: string): Promise<SessionExport> {
+    return this.request<SessionExport>(`/sessions/${sessionId}/export`)
+  }
+
+  async getShareableResult(sessionId: string): Promise<ShareableResult> {
+    return this.request<ShareableResult>(`/sessions/${sessionId}/share`)
+  }
+}
+
+export interface SessionExport {
+  session_id: string
+  module_id: string
+  module_name: string | null
+  agent_id: string
+  variables: Record<string, unknown> | null
+  state: string
+  created_at: string
+  completed_at: string | null
+  duration_seconds: number | null
+  events: Array<{
+    sequence: number
+    type: string
+    payload: Record<string, unknown>
+    timestamp: string | null
+  }>
+  evaluation: {
+    score: number | null
+    checks: Record<string, unknown> | null
+  } | null
+  summary: {
+    total_events: number
+    user_messages: number
+    agent_messages: number
+    tool_calls: number
+    final_score: number | null
+  }
+}
+
+export interface ShareableResult {
+  title: string
+  description: string
+  score: number | null
+  score_display: string
+  share_url: string
+  embed_code: string
 }
 
 export const api = new ApiClient()

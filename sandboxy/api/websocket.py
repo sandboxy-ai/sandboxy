@@ -2,17 +2,22 @@
 
 import asyncio
 import json
+import logging
+import traceback
 from pathlib import Path
 from typing import Any
 
 import yaml
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocketState
 
 from sandboxy.agents.loader import AgentLoader
 from sandboxy.core.mdl_parser import apply_variables, load_module, parse_module
 from sandboxy.db import crud
 from sandboxy.db.database import get_db
 from sandboxy.session.manager import session_manager
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -36,16 +41,40 @@ class ConnectionManager:
         """Accept and track a WebSocket connection."""
         await websocket.accept()
         self.active_connections[session_id] = websocket
+        logger.info(f"WebSocket connected: {session_id}")
 
     def disconnect(self, session_id: str):
         """Remove a WebSocket connection."""
         if session_id in self.active_connections:
             del self.active_connections[session_id]
+            logger.info(f"WebSocket disconnected: {session_id}")
 
-    async def send_message(self, session_id: str, message: dict[str, Any]):
-        """Send a message to a specific session."""
-        if session_id in self.active_connections:
-            await self.active_connections[session_id].send_json(message)
+    async def send_message(self, session_id: str, message: dict[str, Any]) -> bool:
+        """Send a message to a specific session.
+
+        Returns:
+            True if message was sent, False if connection was closed.
+        """
+        websocket = self.active_connections.get(session_id)
+        if not websocket:
+            return False
+
+        try:
+            if websocket.client_state == WebSocketState.CONNECTED:
+                await websocket.send_json(message)
+                return True
+        except Exception as e:
+            logger.warning(f"Failed to send message to {session_id}: {e}")
+            self.disconnect(session_id)
+
+        return False
+
+    def is_connected(self, session_id: str) -> bool:
+        """Check if a session is still connected."""
+        websocket = self.active_connections.get(session_id)
+        if not websocket:
+            return False
+        return websocket.client_state == WebSocketState.CONNECTED
 
 
 manager = ConnectionManager()
@@ -281,6 +310,23 @@ async def websocket_session(websocket: WebSocket):
                         "message": str(e),
                     })
 
+            elif msg_type == "get_env_state":
+                # Get current environment state
+                if not session_id:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "No active session. Send 'start' first.",
+                    })
+                    continue
+
+                session = session_manager.get_session(session_id)
+                if session:
+                    await websocket.send_json({
+                        "type": "env_state",
+                        "session_id": session_id,
+                        "state": session.runner.env_state,
+                    })
+
             elif msg_type == "pause":
                 if session_id:
                     session_manager.pause_session(session_id)
@@ -304,27 +350,42 @@ async def websocket_session(websocket: WebSocket):
                 })
 
     except WebSocketDisconnect:
-        pass
-    except json.JSONDecodeError:
+        logger.info(f"WebSocket disconnected: {session_id or 'no session'}")
+    except json.JSONDecodeError as e:
+        logger.warning(f"Invalid JSON from client: {e}")
         try:
             await websocket.send_json({
                 "type": "error",
-                "message": "Invalid JSON",
+                "message": "Invalid JSON format",
+                "details": str(e),
             })
         except Exception:
             pass
     except Exception as e:
+        logger.error(f"WebSocket error for session {session_id}: {e}")
+        logger.debug(traceback.format_exc())
         try:
             await websocket.send_json({
                 "type": "error",
-                "message": str(e),
+                "message": "Internal server error",
+                "details": str(e) if logger.isEnabledFor(logging.DEBUG) else None,
             })
         except Exception:
             pass
     finally:
         # Cleanup
+        logger.debug(f"Cleaning up session {session_id}")
         if event_task and not event_task.done():
             event_task.cancel()
+            try:
+                await event_task
+            except asyncio.CancelledError:
+                pass
         if session_id:
             manager.disconnect(session_id)
-            session_manager.delete_session(session_id)
+            # Keep session data for potential replay/export
+            # Only delete if explicitly requested or after timeout
+            try:
+                session_manager.mark_session_ended(session_id)
+            except Exception:
+                pass

@@ -422,29 +422,14 @@ class AsyncRunner:
     def _evaluate(self) -> EvaluationResult:
         """Run evaluation checks and compute score."""
         checks: dict[str, Any] = {}
-        total_score = 0.0
-        num_checks = 0
 
+        # Run all checks and collect results
         for check in self.module.evaluation:
             result = self._run_check(check)
             checks[check.name] = result
 
-            # Calculate score contribution
-            if isinstance(result, dict):
-                if result.get("passed") is True:
-                    total_score += 1.0
-                    num_checks += 1
-                elif result.get("passed") is False:
-                    num_checks += 1
-                # Skip checks with status "skipped" or "error"
-            elif isinstance(result, bool):
-                total_score += 1.0 if result else 0.0
-                num_checks += 1
-            elif isinstance(result, (int, float)):
-                total_score += result
-                num_checks += 1
-
-        score = total_score / num_checks if num_checks > 0 else 0.0
+        # Compute final score based on scoring config
+        score = self._compute_score(checks)
 
         return EvaluationResult(
             checks=checks,
@@ -452,6 +437,85 @@ class AsyncRunner:
             num_events=len(self.events),
             status="ok",
         )
+
+    def _compute_score(self, checks: dict[str, Any]) -> float:
+        """Compute final score based on scoring config.
+
+        Supports three modes:
+        1. Formula: Use a Python expression with check names as variables
+        2. Weighted average: Average checks with optional weights
+        3. Default: Simple average of all numeric/boolean results
+        """
+        scoring = self.module.scoring
+
+        # Extract numeric values from checks for use in formulas
+        check_values: dict[str, float] = {}
+        for name, result in checks.items():
+            if isinstance(result, (int, float)):
+                check_values[name] = float(result)
+            elif isinstance(result, bool):
+                check_values[name] = 1.0 if result else 0.0
+            elif isinstance(result, dict):
+                if result.get("passed") is True:
+                    check_values[name] = 1.0
+                elif result.get("passed") is False:
+                    check_values[name] = 0.0
+                elif "value" in result and isinstance(result["value"], (int, float)):
+                    check_values[name] = float(result["value"])
+
+        # Mode 1: Custom formula
+        if scoring.formula:
+            try:
+                score = self._eval_score_formula(scoring.formula, check_values)
+            except Exception:
+                # Fall back to weighted average on formula error
+                score = self._weighted_average(check_values, scoring.weights)
+        else:
+            # Mode 2/3: Weighted average (with optional weights)
+            score = self._weighted_average(check_values, scoring.weights)
+
+        # Normalize if requested
+        if scoring.normalize and scoring.max_score != scoring.min_score:
+            score = (score - scoring.min_score) / (scoring.max_score - scoring.min_score)
+            score = max(0.0, min(1.0, score))  # Clamp to 0-1
+
+        return score
+
+    def _eval_score_formula(self, formula: str, check_values: dict[str, float]) -> float:
+        """Evaluate a score formula with check values as variables."""
+        safe_builtins = {
+            "True": True,
+            "False": False,
+            "None": None,
+            "len": len,
+            "min": min,
+            "max": max,
+            "abs": abs,
+            "sum": sum,
+            "round": round,
+        }
+
+        # Add env_state to context for formulas that reference it
+        context = {"__builtins__": safe_builtins, "env_state": self.env_state}
+        context.update(check_values)
+
+        result = eval(formula, context, {})
+        return float(result)
+
+    def _weighted_average(self, values: dict[str, float], weights: dict[str, float]) -> float:
+        """Compute weighted average of check values."""
+        if not values:
+            return 0.0
+
+        total = 0.0
+        total_weight = 0.0
+
+        for name, value in values.items():
+            weight = weights.get(name, 1.0)
+            total += value * weight
+            total_weight += weight
+
+        return total / total_weight if total_weight > 0 else 0.0
 
     def _run_check(self, check: Any) -> dict[str, Any]:
         """Run a single evaluation check."""

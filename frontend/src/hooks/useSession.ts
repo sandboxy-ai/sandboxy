@@ -67,6 +67,7 @@ export function useSession() {
   const [error, setError] = useState<string | null>(null)
   const [gameState, setGameState] = useState<GameState | null>(null)
   const [lastEvent, setLastEvent] = useState<EventResult | null>(null)
+  const [envState, setEnvState] = useState<Record<string, unknown> | null>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
   const messageIdRef = useRef(0)
@@ -152,6 +153,11 @@ export function useSession() {
             setLastEvent(data.result)
             addMessage('system', `🎲 ${data.result.message}`, { event: data.event, result: data.result })
           }
+          break
+
+        case 'env_state':
+          // Received environment state
+          setEnvState(data.state as Record<string, unknown> || null)
           break
       }
     }
@@ -266,6 +272,13 @@ export function useSession() {
     setLastEvent(null)
   }, [])
 
+  const getEnvState = useCallback(() => {
+    if (wsRef.current?.readyState !== WebSocket.OPEN) {
+      return
+    }
+    wsRef.current.send(JSON.stringify({ type: 'get_env_state' }))
+  }, [])
+
   const disconnect = useCallback(() => {
     wsRef.current?.close()
     wsRef.current = null
@@ -291,11 +304,13 @@ export function useSession() {
     error,
     gameState,
     lastEvent,
+    envState,
     connect,
     disconnect,
     startSession,
     sendMessage,
     injectEvent,
     clearLastEvent,
+    getEnvState,
   }
 }

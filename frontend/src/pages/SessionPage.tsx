@@ -1,12 +1,13 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Send, Loader2, PanelRightClose, PanelRight } from 'lucide-react'
+import { ArrowLeft, Send, Loader2, PanelRightClose, PanelRight, Bug, RefreshCw } from 'lucide-react'
 import { useModule, useAgents } from '../hooks/useModules'
 import { useSession, ChatMessage } from '../hooks/useSession'
 import { ModuleVariable } from '../lib/api'
 import VariableInputs from '../components/VariableInputs'
 import EventPanel from '../components/EventPanel'
 import ContextPanel from '../components/ContextPanel'
+import ShareButton from '../components/ShareButton'
 
 export default function SessionPage() {
   const { moduleSlug } = useParams<{ moduleSlug: string }>()
@@ -15,23 +16,27 @@ export default function SessionPage() {
   const { agents, loading: agentsLoading } = useAgents()
   const {
     state,
+    sessionId,
     messages,
     awaitingPrompt,
     evaluation,
     error: sessionError,
     gameState,
     lastEvent,
+    envState,
     connect,
     startSession,
     sendMessage,
     injectEvent,
     clearLastEvent,
+    getEnvState,
   } = useSession()
 
   const [selectedAgent, setSelectedAgent] = useState<string>('')
   const [inputValue, setInputValue] = useState('')
   const [variables, setVariables] = useState<Record<string, unknown>>({})
   const [showSidebar, setShowSidebar] = useState(true)
+  const [showEnvState, setShowEnvState] = useState(false)
 
   // Connect to WebSocket on mount
   useEffect(() => {
@@ -150,6 +155,25 @@ export default function SessionPage() {
             >
               {showSidebar ? <PanelRightClose size={20} /> : <PanelRight size={20} />}
             </button>
+          )}
+          {!isIdle && (
+            <button
+              onClick={() => {
+                setShowEnvState(!showEnvState)
+                if (!showEnvState) getEnvState()
+              }}
+              className={`transition-colors ${showEnvState ? 'text-accent' : 'text-gray-400 hover:text-white'}`}
+              title="Show environment state"
+            >
+              <Bug size={20} />
+            </button>
+          )}
+          {state === 'completed' && (
+            <ShareButton
+              sessionId={sessionId}
+              score={evaluation?.score as number | undefined}
+              moduleName={module?.name}
+            />
           )}
           <SessionStatus state={state} />
         </div>
@@ -275,6 +299,32 @@ export default function SessionPage() {
                   disabled={!isRunning || state === 'running'}
                   lastEventMessage={lastEvent?.message}
                 />
+              )}
+            </div>
+          )}
+
+          {/* Env State Debug Panel */}
+          {showEnvState && (
+            <div className="w-80 border-l border-dark-border bg-dark-bg p-4 overflow-y-auto">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                  <Bug size={14} className="text-accent" />
+                  Environment State
+                </h3>
+                <button
+                  onClick={getEnvState}
+                  className="text-gray-400 hover:text-white transition-colors"
+                  title="Refresh"
+                >
+                  <RefreshCw size={14} />
+                </button>
+              </div>
+              {envState ? (
+                <pre className="text-xs text-gray-300 bg-dark-card rounded p-3 overflow-auto max-h-[calc(100vh-200px)] font-mono whitespace-pre-wrap">
+                  {JSON.stringify(envState, null, 2)}
+                </pre>
+              ) : (
+                <p className="text-sm text-gray-500">No state available. Click refresh to load.</p>
               )}
             </div>
           )}

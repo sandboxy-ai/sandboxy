@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Home, Wrench } from 'lucide-react'
+import { Home, Wrench, Play } from 'lucide-react'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -9,7 +9,8 @@ export default function Layout({ children }: LayoutProps) {
   const location = useLocation()
 
   const navItems = [
-    { path: '/', icon: Home, label: 'Scenarios' },
+    { path: '/', icon: Home, label: 'Home' },
+    { path: '/scenarios', icon: Play, label: 'Scenarios' },
     { path: '/builder', icon: Wrench, label: 'Builder' },
   ]
 

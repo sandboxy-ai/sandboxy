@@ -195,6 +195,22 @@ class ModuleVariable(BaseModel):
     step: float | None = None  # For slider type
 
 
+class ScoringConfig(BaseModel):
+    """Configuration for how the final score is computed."""
+
+    # Score formula using check names as variables, e.g.:
+    # "Profit * 2 + Reputation + CustomersServed * 5 - CustomersLost * 10"
+    formula: str | None = None
+
+    # If no formula, use weighted average. Default weight is 1.0.
+    weights: dict[str, float] = Field(default_factory=dict)
+
+    # Normalization settings
+    normalize: bool = False  # Normalize score to 0-1 range
+    min_score: float = 0.0  # Expected minimum for normalization
+    max_score: float = 100.0  # Expected maximum for normalization
+
+
 class ModuleSpec(BaseModel):
     """Complete specification for an MDL module."""
 
@@ -206,6 +222,7 @@ class ModuleSpec(BaseModel):
     steps: list[Step] = Field(default_factory=list)
     branches: dict[str, list[Step]] = Field(default_factory=dict)
     evaluation: list[EvaluationCheck] = Field(default_factory=list)
+    scoring: ScoringConfig = Field(default_factory=ScoringConfig)  # Score computation config
 
 
 class EvaluationResult(BaseModel):

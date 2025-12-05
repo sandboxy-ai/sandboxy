@@ -196,8 +196,58 @@ class SessionManager:
         session = self.get_session(session_id)
         if not session:
             return False
-        # TODO: Implement proper resume
         return True
+
+    def mark_session_ended(self, session_id: str) -> bool:
+        """Mark a session as ended (connection closed).
+
+        Unlike delete_session, this preserves the session data for
+        potential replay or export. The session will be cleaned up
+        after a timeout or when explicitly deleted.
+
+        Args:
+            session_id: ID of the session.
+
+        Returns:
+            True if session was marked, False if not found.
+        """
+        session = self.get_session(session_id)
+        if not session:
+            return False
+
+        # Cancel running task if any
+        if session._run_task and not session._run_task.done():
+            session._run_task.cancel()
+
+        return True
+
+    def get_session_events(self, session_id: str) -> list[RunEvent]:
+        """Get all events for a session.
+
+        Args:
+            session_id: ID of the session.
+
+        Returns:
+            List of events, or empty list if session not found.
+        """
+        session = self.get_session(session_id)
+        if not session:
+            return []
+        return list(session.events)
+
+    def get_session_state(self, session_id: str) -> dict[str, Any] | None:
+        """Get the current environment state for a session.
+
+        Args:
+            session_id: ID of the session.
+
+        Returns:
+            The environment state dict, or None if session not found.
+        """
+        session = self.get_session(session_id)
+        if not session:
+            return None
+        return session.runner.env_state
 
 
 # Global session manager instance

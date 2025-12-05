@@ -304,25 +304,17 @@ class Runner:
             Evaluation result with checks and score.
         """
         checks: dict[str, Any] = {}
-        total_score = 0.0
-        num_checks = 0
 
         for check in self.module.evaluation:
             if check.kind == "deterministic":
                 result = self._eval_deterministic(check)
                 checks[check.name] = result
-                if isinstance(result, (int, float)):
-                    total_score += result
-                    num_checks += 1
-                elif isinstance(result, bool):
-                    total_score += 1.0 if result else 0.0
-                    num_checks += 1
             elif check.kind == "llm":
                 # LLM evaluation not implemented in MVP
                 checks[check.name] = {"status": "skipped", "reason": "LLM eval not implemented"}
 
-        # Compute average score if we have checks
-        score = total_score / num_checks if num_checks > 0 else 0.0
+        # Compute score using scoring config
+        score = self._compute_score(checks)
 
         return EvaluationResult(
             checks=checks,
@@ -330,6 +322,59 @@ class Runner:
             num_events=len(self.events),
             status="ok",
         )
+
+    def _compute_score(self, checks: dict[str, Any]) -> float:
+        """Compute final score based on scoring config."""
+        scoring = self.module.scoring
+
+        # Extract numeric values from checks
+        check_values: dict[str, float] = {}
+        for name, result in checks.items():
+            if isinstance(result, (int, float)):
+                check_values[name] = float(result)
+            elif isinstance(result, bool):
+                check_values[name] = 1.0 if result else 0.0
+            elif isinstance(result, dict):
+                if result.get("passed") is True:
+                    check_values[name] = 1.0
+                elif result.get("passed") is False:
+                    check_values[name] = 0.0
+                elif "value" in result and isinstance(result["value"], (int, float)):
+                    check_values[name] = float(result["value"])
+
+        # Use formula if specified
+        if scoring.formula:
+            try:
+                score = self._eval_score_formula(scoring.formula, check_values)
+            except Exception:
+                score = self._weighted_average(check_values, scoring.weights)
+        else:
+            score = self._weighted_average(check_values, scoring.weights)
+
+        # Normalize if requested
+        if scoring.normalize and scoring.max_score != scoring.min_score:
+            score = (score - scoring.min_score) / (scoring.max_score - scoring.min_score)
+            score = max(0.0, min(1.0, score))
+
+        return score
+
+    def _eval_score_formula(self, formula: str, check_values: dict[str, float]) -> float:
+        """Evaluate a score formula."""
+        safe_builtins = {
+            "True": True, "False": False, "None": None,
+            "len": len, "min": min, "max": max, "abs": abs, "sum": sum, "round": round,
+        }
+        context = {"__builtins__": safe_builtins, "env_state": self.env_state}
+        context.update(check_values)
+        return float(eval(formula, context, {}))
+
+    def _weighted_average(self, values: dict[str, float], weights: dict[str, float]) -> float:
+        """Compute weighted average of check values."""
+        if not values:
+            return 0.0
+        total = sum(values[n] * weights.get(n, 1.0) for n in values)
+        total_weight = sum(weights.get(n, 1.0) for n in values)
+        return total / total_weight if total_weight > 0 else 0.0
 
     def _eval_deterministic(self, check: Any) -> Any:
         """Evaluate a deterministic check.
