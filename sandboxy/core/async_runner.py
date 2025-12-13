@@ -268,6 +268,21 @@ class AsyncRunner:
                 # Continue loop to let agent respond to tool result
 
             elif action.type == "stop":
+                # If we've processed tool calls, the agent should respond based on results
+                # Some models return empty content after tool calls - add a hint and retry once
+                if tool_call_count > 0 and not hasattr(self, '_retry_after_tool'):
+                    self._retry_after_tool = True
+                    # Add a system hint to prompt the agent to respond
+                    self.history.append(Message(
+                        role="user",
+                        content="[System: Please respond to the customer based on the information you just retrieved.]"
+                    ))
+                    continue  # Retry the loop
+
+                # Clean up retry flag
+                if hasattr(self, '_retry_after_tool'):
+                    delattr(self, '_retry_after_tool')
+
                 yield RunEvent(
                     type="agent_stop",
                     payload={"step_id": step.id},
@@ -282,8 +297,8 @@ class AsyncRunner:
         tool_action = action.tool_action or ""
         tool_args = action.tool_args or {}
 
-        # Generate unique tool call ID
-        tool_call_id = f"call_{tool_name}_{tool_action}_{len(self.events)}"
+        # Use the original tool_call_id from the model, or generate one as fallback
+        tool_call_id = action.tool_call_id or f"call_{tool_name}_{tool_action}_{len(self.events)}"
         function_name = f"{tool_name}__{tool_action}"
 
         yield RunEvent(
@@ -734,7 +749,7 @@ class AsyncRunner:
         }
 
     def _check_deterministic(self, check: Any) -> dict[str, Any]:
-        """Legacy: Evaluate a deterministic check with Python expression."""
+        """Evaluate a deterministic check with Python expression and optional pass_if condition."""
         expr = check.config.get("expr", "")
         if not expr or expr == "TODO":
             return {"status": "skipped", "reason": "No expression defined"}
@@ -747,12 +762,46 @@ class AsyncRunner:
 
         try:
             result = self._safe_eval(expr, context)
-            if isinstance(result, bool):
-                return {"passed": result, "legacy": True}
+
+            # Check for pass_if condition (e.g., ">=0", "<=5", ">=50")
+            pass_if = check.config.get("pass_if")
+            if pass_if and isinstance(result, (int, float)):
+                passed = self._evaluate_pass_condition(result, pass_if)
+                return {"passed": passed, "value": result, "condition": pass_if}
+            elif isinstance(result, bool):
+                return {"passed": result}
             else:
-                return {"passed": bool(result), "value": result, "legacy": True}
+                # For numeric values without pass_if, just return the value (no pass/fail)
+                return {"value": result}
         except Exception as e:
             return {"status": "error", "error": str(e)}
+
+    def _evaluate_pass_condition(self, value: float, condition: str) -> bool:
+        """Evaluate a pass_if condition like '>=0', '<=5', '>50'."""
+        import re
+
+        # Parse condition: operator + value (e.g., ">=50", "<=0", ">10")
+        match = re.match(r"([<>=!]+)\s*(-?[\d.]+)", condition)
+        if not match:
+            return True  # No valid condition, default to pass
+
+        op, threshold_str = match.groups()
+        threshold = float(threshold_str)
+
+        if op == ">=":
+            return value >= threshold
+        elif op == "<=":
+            return value <= threshold
+        elif op == ">":
+            return value > threshold
+        elif op == "<":
+            return value < threshold
+        elif op == "==" or op == "=":
+            return value == threshold
+        elif op == "!=" or op == "<>":
+            return value != threshold
+        else:
+            return True  # Unknown operator, default to pass
 
     def _safe_eval(self, expr: str, context: dict[str, Any]) -> Any:
         """Safely evaluate an expression with restricted scope (legacy support)."""
