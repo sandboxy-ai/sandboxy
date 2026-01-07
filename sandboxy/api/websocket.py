@@ -81,7 +81,14 @@ manager = ConnectionManager()
 
 
 async def _load_module_from_id(module_id: str):
-    """Load a module from ID (either file:slug or database ID)."""
+    """Load a module from ID (either file:slug, challenge:id, or database ID)."""
+    # Handle challenge modules
+    if module_id.startswith("challenge:"):
+        from sandboxy.challenges import load_challenge
+        challenge_id = module_id[10:]  # Remove "challenge:" prefix
+        challenge = load_challenge(challenge_id)
+        return challenge.module
+
     # Try file-based modules first
     if module_id.startswith("file:"):
         slug = module_id[5:]
@@ -127,13 +134,32 @@ async def websocket_session(websocket: WebSocket):
     """
     await websocket.accept()
     session_id: str | None = None
+    db_session_id: str | None = None  # Database session ID for persistence
+    event_sequence: int = 0  # Track event sequence for database
     event_task: asyncio.Task | None = None
+
+    async def save_event_to_db(event_type: str, payload: dict):
+        """Save an event to the database."""
+        nonlocal event_sequence
+        if not db_session_id:
+            return
+        event_sequence += 1
+        try:
+            async for db in get_db():
+                await crud.add_session_event(db, db_session_id, event_sequence, event_type, payload)
+                break
+        except Exception as e:
+            logger.warning(f"Failed to save event to database: {e}")
 
     async def send_events(session_id: str, event_queue: asyncio.Queue):
         """Background task to send events to the WebSocket."""
+        nonlocal db_session_id
         try:
             while True:
                 event = await event_queue.get()
+
+                # Save event to database for replay
+                await save_event_to_db(event.type, event.payload)
 
                 if event.type == "awaiting_input":
                     await websocket.send_json({
@@ -143,6 +169,25 @@ async def websocket_session(websocket: WebSocket):
                         "timeout": event.payload.get("timeout"),
                     })
                 elif event.type == "completed":
+                    # Update session state in database
+                    if db_session_id:
+                        try:
+                            async for db in get_db():
+                                db_session = await crud.get_session_by_id(db, db_session_id)
+                                if db_session:
+                                    await crud.update_session_state(db, db_session, "completed")
+                                    # Save evaluation if present (upsert to handle re-runs)
+                                    evaluation = event.payload.get("evaluation")
+                                    if evaluation:
+                                        await crud.upsert_evaluation(
+                                            db,
+                                            db_session_id,
+                                            score=evaluation.get("score"),
+                                            checks=evaluation.get("checks"),
+                                        )
+                                break
+                        except Exception as e:
+                            logger.warning(f"Failed to update session state: {e}")
                     await websocket.send_json({
                         "type": "completed",
                         "session_id": session_id,
@@ -150,6 +195,16 @@ async def websocket_session(websocket: WebSocket):
                     })
                     break  # Session complete
                 elif event.type == "error":
+                    # Update session state in database
+                    if db_session_id:
+                        try:
+                            async for db in get_db():
+                                db_session = await crud.get_session_by_id(db, db_session_id)
+                                if db_session:
+                                    await crud.update_session_state(db, db_session, "error")
+                                break
+                        except Exception as e:
+                            logger.warning(f"Failed to update session state: {e}")
                     await websocket.send_json({
                         "type": "error",
                         "session_id": session_id,
@@ -215,12 +270,29 @@ async def websocket_session(websocket: WebSocket):
                     session = session_manager.create_session(module, agent, variables)
                     session_id = session.id
 
+                    # Create database session for persistence/replay
+                    try:
+                        async for db in get_db():
+                            db_session = await crud.create_session(
+                                db,
+                                module_id=module_id,
+                                agent_id=agent_id,
+                                variables=variables,
+                            )
+                            db_session_id = db_session.id
+                            # Update state to running
+                            await crud.update_session_state(db, db_session, "running")
+                            break
+                    except Exception as e:
+                        logger.warning(f"Failed to create database session: {e}")
+
                     # Track connection
                     manager.active_connections[session_id] = websocket
 
                     await websocket.send_json({
                         "type": "started",
                         "session_id": session_id,
+                        "db_session_id": db_session_id,  # Include DB session ID for replay
                         "module_name": module.id,
                         "agent_id": agent_id,
                     })

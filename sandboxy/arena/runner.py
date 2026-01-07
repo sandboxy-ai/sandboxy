@@ -283,6 +283,8 @@ class ArenaRunner:
             return self._judge_with_length(judge_config, valid_results)
         elif judge_config.type == JudgeType.CONSENSUS:
             return await self._judge_with_consensus(judge_config, valid_results, prompt)
+        elif judge_config.type == JudgeType.COMPUTED:
+            return self._judge_with_computed(judge_config, valid_results, prompt)
         else:
             # Default to simple pass (no real judgment)
             return {
@@ -605,5 +607,86 @@ Respond with ONLY a number between 0.0 and 1.0."""
                     reasoning="No votes received",
                     judge_type="consensus",
                 )
+
+        return judgments
+
+    def _judge_with_computed(
+        self,
+        config: Any,
+        results: dict[str, ModelResult],
+        prompt: ArenaPrompt,
+    ) -> dict[str, JudgmentResult]:
+        """Judge responses using a computed ground truth from a helper.
+
+        This is the most reliable judge type - it computes the correct answer
+        using Python and checks if the model's response matches.
+        """
+        from sandboxy.arena.helpers import get_helper
+
+        helper_id = config.helper
+        if not helper_id:
+            logger.error("Computed judge requires 'helper' in config")
+            return {
+                model_id: JudgmentResult(
+                    model_id=model_id,
+                    score=0.0,
+                    passed=False,
+                    reasoning="No helper configured for computed judge",
+                    judge_type="computed",
+                )
+                for model_id in results
+            }
+
+        helper = get_helper(helper_id)
+        if not helper:
+            logger.error(f"Helper not found: {helper_id}")
+            return {
+                model_id: JudgmentResult(
+                    model_id=model_id,
+                    score=0.0,
+                    passed=False,
+                    reasoning=f"Helper '{helper_id}' not found",
+                    judge_type="computed",
+                )
+                for model_id in results
+            }
+
+        # Extract variables from prompt
+        variables = {}
+        for var in prompt.variables:
+            variables[var.name] = var.default
+
+        # Compute the correct answer
+        try:
+            expected = helper.solve(**variables)
+            logger.info(f"Computed answer: {expected} (from {helper_id})")
+        except Exception as e:
+            logger.error(f"Helper solve() failed: {e}")
+            return {
+                model_id: JudgmentResult(
+                    model_id=model_id,
+                    score=0.0,
+                    passed=False,
+                    reasoning=f"Helper solve() error: {e}",
+                    judge_type="computed",
+                )
+                for model_id in results
+            }
+
+        # Validate each response
+        judgments = {}
+        for model_id, result in results.items():
+            try:
+                passed, score, reasoning = helper.validate(result.response, expected)
+            except Exception as e:
+                passed, score, reasoning = False, 0.0, f"Validation error: {e}"
+
+            judgments[model_id] = JudgmentResult(
+                model_id=model_id,
+                score=score,
+                passed=passed,
+                reasoning=f"Expected: {expected}. {reasoning}",
+                judge_type="computed",
+            )
 
         return judgments
