@@ -8,6 +8,42 @@ from sandboxy.tools.base import BaseTool, ToolConfig, ToolResult
 class MockShopifyTool(BaseTool):
     """Mock Shopify store for orders, refunds, and customer management."""
 
+    @classmethod
+    def config_schema(cls) -> dict[str, Any]:
+        """Return the configuration schema for this tool."""
+        return {
+            "initial_orders": {
+                "type": "object",
+                "label": "Initial Orders",
+                "description": "Pre-existing orders in the system (order_id -> order data)",
+                "default": {
+                    "ORD123": {
+                        "id": "ORD123",
+                        "status": "Delivered",
+                        "refunded": False,
+                        "total": 99.99,
+                        "customer_email": "customer@example.com",
+                        "items": [{"name": "Widget", "quantity": 1, "price": 99.99}],
+                        "created_at": "2024-01-15T10:00:00Z",
+                    },
+                },
+            },
+            "initial_customers": {
+                "type": "object",
+                "label": "Initial Customers",
+                "description": "Pre-existing customers (customer_id -> customer data)",
+                "default": {
+                    "CUST001": {
+                        "id": "CUST001",
+                        "email": "customer@example.com",
+                        "name": "John Doe",
+                        "total_orders": 5,
+                        "total_spent": 450.00,
+                    },
+                },
+            },
+        }
+
     def __init__(self, config: ToolConfig) -> None:
         super().__init__(config)
         # Initialize in-memory store with default data

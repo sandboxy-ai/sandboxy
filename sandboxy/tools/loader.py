@@ -1,18 +1,29 @@
 """Tool loader - dynamically loads tool implementations from specs."""
 
+from __future__ import annotations
+
 import importlib
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
 from sandboxy.core.state import EnvConfig
 from sandboxy.tools.base import BaseTool, Tool, ToolConfig
 
+if TYPE_CHECKING:
+    from sandboxy.tools.yaml_tools import YamlMockTool, YamlToolLoader as YTL
+
 # Default directories to search for tool specs
 TOOLS_DIRS = [
     Path("tools/core"),
     Path("tools/community"),
+]
+
+# Default directories for YAML tool libraries
+YAML_TOOL_DIRS = [
+    Path("tools"),
+    Path("sandboxy/tools/libraries"),
 ]
 
 # Built-in tool mappings (type -> module:class)
@@ -23,6 +34,8 @@ BUILTIN_TOOLS: dict[str, str] = {
     "mock_lemonade": "sandboxy.tools.mock_lemonade:MockLemonadeTool",
     "mock_store": "sandboxy.tools.mock_store:MockStoreTool",
     "mock_wedding": "sandboxy.tools.mock_wedding:MockWeddingTool",
+    "mock_customer_support": "sandboxy.tools.mock_customer_support:MockCustomerSupportTool",
+    "mock_mechanic": "sandboxy.tools.mock_mechanic:MockMechanicTool",
 }
 
 
@@ -60,7 +73,7 @@ def _load_tool_specs(dirs: list[Path] | None = None) -> dict[str, dict[str, Any]
     return specs
 
 
-def _load_tool_class(module_path: str) -> type[BaseTool]:
+def load_tool_class(module_path: str) -> type[BaseTool]:
     """Load a tool class from a module path.
 
     Args:
@@ -118,7 +131,7 @@ class ToolLoader:
                 raise ValueError(f"Unknown tool type: {tool_ref.type}")
 
             # Load and instantiate the tool class
-            tool_cls = _load_tool_class(module_path)
+            tool_cls = load_tool_class(module_path)
             config = ToolConfig(
                 name=tool_ref.name,
                 type=tool_ref.type,
@@ -142,4 +155,90 @@ class ToolLoader:
         specs = _load_tool_specs(tool_dirs)
         available = list(BUILTIN_TOOLS.keys())
         available.extend(specs.keys())
+
+        # Also list YAML tool libraries
+        yaml_libs = get_yaml_tool_libraries()
+        available.extend(yaml_libs)
+
         return sorted(set(available))
+
+
+# -----------------------------------------------------------------------------
+# YAML Tool Library Support
+# -----------------------------------------------------------------------------
+
+
+def get_yaml_tool_libraries(tool_dirs: list[Path] | None = None) -> list[str]:
+    """Get list of available YAML tool library names.
+
+    Args:
+        tool_dirs: Directories to search. Uses YAML_TOOL_DIRS if None.
+
+    Returns:
+        List of library names (without extension).
+    """
+    if tool_dirs is None:
+        tool_dirs = YAML_TOOL_DIRS
+
+    libraries: list[str] = []
+    for d in tool_dirs:
+        if not d.exists():
+            continue
+        for ext in (".yml", ".yaml"):
+            for path in d.glob(f"*{ext}"):
+                # Only include files that start with mock_ or have tools: key
+                try:
+                    raw = yaml.safe_load(path.read_text())
+                    if raw and ("tools" in raw or path.stem.startswith("mock_")):
+                        libraries.append(path.stem)
+                except yaml.YAMLError:
+                    continue
+
+    return libraries
+
+
+def load_yaml_tools_from_scenario(
+    scenario_data: dict[str, Any],
+    tool_dirs: list[Path] | None = None,
+) -> dict[str, Tool]:
+    """Load YAML-defined tools from a scenario definition.
+
+    This handles both `tools_from` library references and inline `tools` definitions.
+    Use this when loading scenarios that define their own tools.
+
+    Args:
+        scenario_data: Parsed scenario YAML containing tools and/or tools_from
+        tool_dirs: Optional directories to search for tool libraries
+
+    Returns:
+        Dictionary of tool name to tool instance
+    """
+    from sandboxy.tools.yaml_tools import load_scenario_tools
+
+    if tool_dirs is None:
+        tool_dirs = YAML_TOOL_DIRS
+
+    return load_scenario_tools(scenario_data, tool_dirs)
+
+
+def load_yaml_tool_library(
+    library_name: str,
+    tool_dirs: list[Path] | None = None,
+) -> dict[str, Tool]:
+    """Load all tools from a YAML tool library.
+
+    Args:
+        library_name: Name of the library (without extension)
+        tool_dirs: Optional directories to search
+
+    Returns:
+        Dictionary of tool name to tool instance
+    """
+    from sandboxy.tools.yaml_tools import YamlToolLoader
+
+    if tool_dirs is None:
+        tool_dirs = YAML_TOOL_DIRS
+
+    loader = YamlToolLoader(tool_dirs)
+    library = loader.load_library(library_name)
+    return loader.create_tool_instances(library.tools)

@@ -19,6 +19,48 @@ class MockWeddingTool(BaseTool):
     must handle professionally.
     """
 
+    @classmethod
+    def config_schema(cls) -> dict[str, Any]:
+        """Return the configuration schema for this tool."""
+        return {
+            "budget": {
+                "type": "number",
+                "label": "Total Budget ($)",
+                "description": "The wedding budget",
+                "default": 50000,
+                "min": 5000,
+                "max": 500000,
+            },
+            "bride_sanity": {
+                "type": "number",
+                "label": "Bride Sanity Level",
+                "description": "Starting sanity level (1=reasonable, 10=full bridezilla)",
+                "default": 5,
+                "min": 1,
+                "max": 10,
+            },
+            "guest_count": {
+                "type": "number",
+                "label": "Guest Count",
+                "description": "Number of wedding guests",
+                "default": 150,
+                "min": 10,
+                "max": 1000,
+            },
+            "wedding_date": {
+                "type": "string",
+                "label": "Wedding Date",
+                "description": "The scheduled wedding date",
+                "default": "June 15, 2025",
+            },
+            "theme": {
+                "type": "string",
+                "label": "Wedding Theme",
+                "description": "The initial wedding theme",
+                "default": "Classic Elegance",
+            },
+        }
+
     def __init__(self, config: ToolConfig) -> None:
         super().__init__(config)
 

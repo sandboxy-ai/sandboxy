@@ -8,6 +8,22 @@ from sandboxy.tools.base import BaseTool, ToolConfig, ToolResult
 class MockBrowserTool(BaseTool):
     """Mock browser with canned pages for testing."""
 
+    @classmethod
+    def config_schema(cls) -> dict[str, Any]:
+        """Return the configuration schema for this tool."""
+        return {
+            "pages": {
+                "type": "object",
+                "label": "Available Pages",
+                "description": "URL -> content mapping for mock browser pages",
+                "default": {
+                    "https://example.com": "<html><body><h1>Example</h1></body></html>",
+                    "https://example.com/policy": "Refund Policy: Refunds allowed within 30 days.",
+                    "https://example.com/faq": "FAQ: Common questions and answers.",
+                },
+            },
+        }
+
     def __init__(self, config: ToolConfig) -> None:
         super().__init__(config)
         # Initialize with default pages or from config

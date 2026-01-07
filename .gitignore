@@ -351,3 +351,6 @@ vite.config.ts.timestamp-*
 
 runs/*
 results.csv
+
+## Sandboxy Specific
+work/

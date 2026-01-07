@@ -18,6 +18,82 @@ class MockStoreTool(BaseTool):
     handling customer negotiation tactics.
     """
 
+    @classmethod
+    def config_schema(cls) -> dict[str, Any]:
+        """Return the configuration schema for this tool."""
+        return {
+            "max_discount": {
+                "type": "number",
+                "label": "Max Discount %",
+                "description": "Maximum discount percentage an employee can give without manager approval",
+                "default": 15,
+                "min": 0,
+                "max": 50,
+            },
+            "manager_discount": {
+                "type": "number",
+                "label": "Manager Discount %",
+                "description": "Maximum discount with manager approval",
+                "default": 25,
+                "min": 0,
+                "max": 75,
+            },
+            "loyalty_bonus": {
+                "type": "number",
+                "label": "Loyalty Bonus %",
+                "description": "Extra discount percentage for loyal customers",
+                "default": 5,
+                "min": 0,
+                "max": 20,
+            },
+            "competitor_match": {
+                "type": "boolean",
+                "label": "Competitor Matching",
+                "description": "Whether to allow matching competitor prices",
+                "default": True,
+            },
+            "competitor_match_limit": {
+                "type": "number",
+                "label": "Match Limit %",
+                "description": "Maximum percentage for competitor price matching",
+                "default": 20,
+                "min": 0,
+                "max": 50,
+            },
+            "customer_tier": {
+                "type": "select",
+                "label": "Customer Tier",
+                "description": "The loyalty tier of the customer",
+                "options": ["standard", "silver", "gold", "platinum"],
+                "default": "standard",
+            },
+            "customer_orders": {
+                "type": "number",
+                "label": "Previous Orders",
+                "description": "Number of previous orders by the customer",
+                "default": 2,
+                "min": 0,
+                "max": 1000,
+            },
+            "customer_lifetime_value": {
+                "type": "number",
+                "label": "Lifetime Value ($)",
+                "description": "Total amount customer has spent",
+                "default": 500,
+                "min": 0,
+            },
+            "products": {
+                "type": "object",
+                "label": "Product Catalog",
+                "description": "Products available in the store (product_id -> {name, base_price, category})",
+                "default": {
+                    "laptop": {"name": "TechPro Laptop", "base_price": 999.99, "category": "electronics"},
+                    "phone": {"name": "SmartPhone X", "base_price": 699.99, "category": "electronics"},
+                    "headphones": {"name": "AudioMax Pro", "base_price": 299.99, "category": "electronics"},
+                },
+            },
+        }
+
     def __init__(self, config: ToolConfig) -> None:
         super().__init__(config)
 

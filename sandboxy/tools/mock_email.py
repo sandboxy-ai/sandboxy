@@ -10,6 +10,29 @@ from sandboxy.tools.base import BaseTool, ToolConfig, ToolResult
 class MockEmailTool(BaseTool):
     """Mock email service for testing."""
 
+    @classmethod
+    def config_schema(cls) -> dict[str, Any]:
+        """Return the configuration schema for this tool."""
+        return {
+            "initial_inbox": {
+                "type": "array",
+                "label": "Initial Inbox",
+                "description": "Pre-existing emails in the inbox",
+                "default": [],
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "from": {"type": "string"},
+                        "subject": {"type": "string"},
+                        "body": {"type": "string"},
+                        "received_at": {"type": "string"},
+                        "read": {"type": "boolean"},
+                    },
+                },
+            },
+        }
+
     def __init__(self, config: ToolConfig) -> None:
         super().__init__(config)
         # Initialize with empty mailboxes or from config

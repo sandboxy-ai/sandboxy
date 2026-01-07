@@ -170,6 +170,55 @@ class MockLemonadeTool(BaseTool):
     - Random/injected events
     """
 
+    @classmethod
+    def config_schema(cls) -> dict[str, Any]:
+        """Return the configuration schema for this tool."""
+        return {
+            "starting_cash": {
+                "type": "number",
+                "label": "Starting Cash ($)",
+                "description": "How much money the stand starts with",
+                "default": 50.0,
+                "min": 0,
+                "max": 1000,
+            },
+            "starting_price": {
+                "type": "number",
+                "label": "Starting Price ($)",
+                "description": "Initial price per cup of lemonade",
+                "default": 2.0,
+                "min": 0.25,
+                "max": 20,
+                "step": 0.25,
+            },
+            "difficulty": {
+                "type": "number",
+                "label": "Difficulty",
+                "description": "Affects base demand and event frequency (1-10)",
+                "default": 5,
+                "min": 1,
+                "max": 10,
+            },
+            "seed": {
+                "type": "number",
+                "label": "Random Seed",
+                "description": "Seed for reproducible randomness (optional)",
+                "default": None,
+            },
+            "initial_supplies": {
+                "type": "object",
+                "label": "Initial Supplies",
+                "description": "Starting inventory for the stand",
+                "default": {
+                    "cups_ready": 0,
+                    "lemons": 20,
+                    "sugar": 20,
+                    "ice": 50,
+                    "cups_empty": 30,
+                },
+            },
+        }
+
     def __init__(self, config: ToolConfig) -> None:
         super().__init__(config)
 
@@ -471,6 +520,8 @@ class MockLemonadeTool(BaseTool):
             "cash": round(self.state.cash, 2),
             "cups_remaining": supplies.cups,
             "customers_still_waiting": queue.count,
+            # Include stats so the UI can update
+            "stats": stats.to_dict(),
         }
 
         messages = []
@@ -985,19 +1036,25 @@ class MockLemonadeTool(BaseTool):
         )
 
     def _event_bulk_order(self, args: dict[str, Any]) -> ToolResult:
-        """Office wants to place a bulk order."""
+        """Office wants to place a bulk order - actually adds customers to queue."""
         cups_wanted = random.randint(15, 30)
+
+        # Actually add these customers to the queue!
+        self.state.queue.count += cups_wanted
+        if self.state.queue.count > self.state.stats.peak_queue:
+            self.state.stats.peak_queue = self.state.queue.count
 
         return ToolResult(
             success=True,
             data={
-                "event": "BULK ORDER REQUEST",
+                "event": "BULK ORDER",
                 "message": f"An office nearby wants to order {cups_wanted} cups for their meeting!",
-                "request": {
-                    "cups_wanted": cups_wanted,
+                "effects": {
+                    "customers_added": cups_wanted,
+                    "total_waiting": self.state.queue.count,
                     "potential_revenue": round(cups_wanted * self.state.price_per_cup, 2),
                 },
-                "note": "You need enough cups ready to fulfill this order!",
+                "urgent": "Serve them quickly or they'll leave!",
             }
         )
 
