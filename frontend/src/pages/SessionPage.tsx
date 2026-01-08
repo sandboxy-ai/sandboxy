@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Send, Loader2, PanelRightClose, PanelRight, Bug, RefreshCw } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
 import { useModule, useAgents } from '../hooks/useModules'
 import { useSession, ChatMessage } from '../hooks/useSession'
 import { ModuleVariable } from '../lib/api'
@@ -8,6 +9,7 @@ import VariableInputs from '../components/VariableInputs'
 import EventPanel from '../components/EventPanel'
 import ContextPanel from '../components/ContextPanel'
 import ShareButton from '../components/ShareButton'
+import ResultsDashboard from '../components/ResultsDashboard'
 
 export default function SessionPage() {
   const { moduleSlug } = useParams<{ moduleSlug: string }>()
@@ -16,7 +18,7 @@ export default function SessionPage() {
   const { agents, loading: agentsLoading } = useAgents()
   const {
     state,
-    sessionId,
+    dbSessionId,
     messages,
     awaitingPrompt,
     evaluation,
@@ -152,6 +154,7 @@ export default function SessionPage() {
               onClick={() => setShowSidebar(!showSidebar)}
               className="text-gray-400 hover:text-white transition-colors"
               title={showSidebar ? 'Hide sidebar' : 'Show sidebar'}
+              aria-label="Show Sidebar"
             >
               {showSidebar ? <PanelRightClose size={20} /> : <PanelRight size={20} />}
             </button>
@@ -164,13 +167,14 @@ export default function SessionPage() {
               }}
               className={`transition-colors ${showEnvState ? 'text-accent' : 'text-gray-400 hover:text-white'}`}
               title="Show environment state"
+              aria-label="Show environment state"
             >
               <Bug size={20} />
             </button>
           )}
-          {state === 'completed' && (
+          {state === 'completed' && dbSessionId && (
             <ShareButton
-              sessionId={sessionId}
+              sessionId={dbSessionId}
               score={evaluation?.score as number | undefined}
               moduleName={module?.name}
             />
@@ -219,6 +223,7 @@ export default function SessionPage() {
                 onClick={handleStart}
                 disabled={state === 'connecting' || !selectedAgent}
                 className="w-full bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition-colors"
+                aria-label="Connect to a session"
               >
                 {state === 'connecting' ? 'Connecting...' : 'Start Session'}
               </button>
@@ -245,7 +250,10 @@ export default function SessionPage() {
               )}
 
               {evaluation && (
-                <EvaluationCard evaluation={evaluation} />
+                <ResultsDashboard
+                  evaluation={evaluation as Record<string, unknown>}
+                  moduleName={module?.name}
+                />
               )}
             </div>
 
@@ -269,6 +277,7 @@ export default function SessionPage() {
                   onClick={handleSend}
                   disabled={!canSend || !inputValue.trim()}
                   className="bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 rounded-lg transition-colors"
+                  aria-label="Send"
                 >
                   <Send size={20} />
                 </button>
@@ -315,6 +324,7 @@ export default function SessionPage() {
                   onClick={getEnvState}
                   className="text-gray-400 hover:text-white transition-colors"
                   title="Refresh"
+                  aria-label="Refresh"
                 >
                   <RefreshCw size={14} />
                 </button>
@@ -382,64 +392,40 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     )
   }
 
+  // Render markdown for agent responses, plain text for user messages
+  const renderContent = () => {
+    if (message.role === 'agent') {
+      return (
+        <div className="prose prose-invert max-w-none
+          prose-p:my-3 prose-p:leading-relaxed prose-p:text-gray-100
+          prose-headings:font-bold prose-headings:text-white prose-headings:border-b prose-headings:border-dark-border prose-headings:pb-2
+          prose-h1:text-2xl prose-h1:mt-6 prose-h1:mb-4
+          prose-h2:text-xl prose-h2:mt-5 prose-h2:mb-3
+          prose-h3:text-lg prose-h3:mt-4 prose-h3:mb-2
+          prose-h4:text-base prose-h4:mt-3 prose-h4:mb-2 prose-h4:border-none
+          prose-ul:my-3 prose-ol:my-3 prose-li:my-1 prose-li:text-gray-200
+          prose-code:bg-dark-card prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-accent prose-code:font-mono prose-code:text-sm prose-code:before:content-none prose-code:after:content-none
+          prose-pre:bg-dark-card prose-pre:border prose-pre:border-dark-border prose-pre:rounded-lg prose-pre:my-4 prose-pre:p-4
+          prose-blockquote:border-l-4 prose-blockquote:border-accent prose-blockquote:bg-dark-card/50 prose-blockquote:pl-4 prose-blockquote:py-2 prose-blockquote:my-4 prose-blockquote:text-gray-300 prose-blockquote:italic
+          prose-strong:text-white prose-strong:font-semibold
+          prose-em:text-gray-200
+          prose-a:text-accent prose-a:no-underline hover:prose-a:underline
+          prose-hr:border-dark-border prose-hr:my-6"
+        >
+          <ReactMarkdown>{message.content}</ReactMarkdown>
+        </div>
+      )
+    }
+    return <div className="text-white whitespace-pre-wrap">{message.content}</div>
+  }
+
   return (
     <div className={`flex ${config.align} animate-slide-in`}>
       <div className={`max-w-[80%] ${config.bg} rounded-xl px-4 py-3`}>
         <div className="text-xs text-gray-400 mb-1">{config.label}</div>
-        <div className="text-white whitespace-pre-wrap">{message.content}</div>
+        {renderContent()}
       </div>
     </div>
   )
 }
 
-function EvaluationCard({ evaluation }: { evaluation: Record<string, unknown> }) {
-  const score = evaluation.score as number | undefined
-  const checks = evaluation.checks as Record<string, unknown> | undefined
-
-  return (
-    <div className="bg-dark-card border border-dark-border rounded-xl p-4 mt-4">
-      <h3 className="text-lg font-semibold text-white mb-3">Evaluation Results</h3>
-
-      {score !== undefined && (
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-gray-400">Score</span>
-            <span className="text-xl font-bold text-accent">{Math.round(score * 100)}%</span>
-          </div>
-          <div className="w-full bg-dark-bg rounded-full h-2">
-            <div
-              className="bg-accent rounded-full h-2 transition-all"
-              style={{ width: `${Math.min(100, score * 100)}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      {checks && Object.keys(checks).length > 0 && (
-        <div className="space-y-2">
-          {Object.entries(checks).map(([name, result]) => {
-            const checkResult = result as { passed?: boolean; value?: unknown }
-            const passed = checkResult.passed
-            const value = checkResult.value
-
-            return (
-              <div key={name} className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <span className={passed === true ? 'text-green-400' : passed === false ? 'text-red-400' : 'text-gray-400'}>
-                    {passed === true ? '✓' : passed === false ? '✗' : '•'}
-                  </span>
-                  <span className="text-gray-300">{name}</span>
-                </div>
-                {value !== undefined && (
-                  <span className="text-gray-400 font-mono text-xs">
-                    {typeof value === 'number' ? value.toFixed(2) : String(value)}
-                  </span>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}

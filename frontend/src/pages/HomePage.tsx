@@ -16,9 +16,9 @@ export default function HomePage() {
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Scenarios</h1>
+          <h1 className="text-3xl font-bold text-white mb-2">Simulations</h1>
           <p className="text-gray-400">
-            Select a scenario to test your social engineering skills against AI agents
+            Run AI agents through interactive, multi-step simulations
           </p>
         </div>
 
@@ -76,10 +76,10 @@ export default function HomePage() {
               <div className="col-span-full text-center py-12">
                 <Bot className="mx-auto text-gray-600 mb-4" size={48} />
                 <h3 className="text-lg font-semibold text-white mb-2">
-                  No scenarios yet
+                  No simulations yet
                 </h3>
                 <p className="text-gray-400 mb-4">
-                  Create your first scenario using the builder
+                  Create your first simulation using the builder
                 </p>
                 <Link
                   to="/builder"

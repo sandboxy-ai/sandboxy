@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Home, Wrench, Play } from 'lucide-react'
+import { Home, Wrench, Play, Swords, Bot, Trophy } from 'lucide-react'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -10,14 +10,17 @@ export default function Layout({ children }: LayoutProps) {
 
   const navItems = [
     { path: '/', icon: Home, label: 'Home' },
-    { path: '/scenarios', icon: Play, label: 'Scenarios' },
+    { path: '/challenge', icon: Trophy, label: 'Challenges' },
+    { path: '/simulations', icon: Play, label: 'Simulations' },
+    { path: '/arena', icon: Swords, label: 'Arena' },
+    { path: '/autosim', icon: Bot, label: 'Auto-Sim' },
     { path: '/builder', icon: Wrench, label: 'Builder' },
   ]
 
   return (
-    <div className="min-h-screen bg-dark-bg flex">
+    <div className="h-screen bg-dark-bg flex overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-64 bg-dark-card border-r border-dark-border flex flex-col">
+      <aside className="w-64 bg-dark-card border-r border-dark-border flex flex-col flex-shrink-0">
         {/* Logo */}
         <div className="p-4 border-b border-dark-border">
           <Link to="/" className="flex items-center gap-2">
@@ -63,7 +66,7 @@ export default function Layout({ children }: LayoutProps) {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-hidden">
         {children}
       </main>
     </div>

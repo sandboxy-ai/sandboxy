@@ -68,6 +68,7 @@ export default function ShareButton({ sessionId, score, moduleName }: ShareButto
       <button
         onClick={() => setShowMenu(!showMenu)}
         className="flex items-center gap-2 px-3 py-1.5 bg-accent hover:bg-accent-hover rounded-lg text-white text-sm transition-colors"
+        aria-label="Share"
       >
         <Share2 size={16} />
         Share
@@ -86,6 +87,7 @@ export default function ShareButton({ sessionId, score, moduleName }: ShareButto
             <button
               onClick={handleCopyLink}
               className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-dark-hover transition-colors text-gray-300"
+              aria-label="Copy Link"
             >
               {copied ? (
                 <>
@@ -103,6 +105,7 @@ export default function ShareButton({ sessionId, score, moduleName }: ShareButto
             <button
               onClick={handleTwitterShare}
               className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-dark-hover transition-colors text-gray-300"
+              aria-label="Share on X"
             >
               <Twitter size={16} />
               <span>Share on X</span>
@@ -111,6 +114,7 @@ export default function ShareButton({ sessionId, score, moduleName }: ShareButto
             <button
               onClick={handleDownloadJson}
               className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-dark-hover transition-colors text-gray-300"
+              aria-label="Download JSON"
             >
               <Download size={16} />
               <span>Download JSON</span>
