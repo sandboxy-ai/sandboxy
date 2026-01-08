@@ -49,6 +49,7 @@ export interface EventResult {
 interface WebSocketMessage {
   type: string
   session_id?: string
+  db_session_id?: string  // Database session ID for replay/sharing
   event_type?: string
   payload?: Record<string, unknown>
   prompt?: string
@@ -56,11 +57,13 @@ interface WebSocketMessage {
   message?: string
   event?: string
   result?: EventResult
+  state?: Record<string, unknown>
 }
 
 export function useSession() {
   const [state, setState] = useState<SessionState>('disconnected')
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [dbSessionId, setDbSessionId] = useState<string | null>(null)  // Database session ID for replay
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [awaitingPrompt, setAwaitingPrompt] = useState<string | null>(null)
   const [evaluation, setEvaluation] = useState<Record<string, unknown> | null>(null)
@@ -88,6 +91,57 @@ export function useSession() {
     setMessages(prev => [...prev, message])
     return message
   }, [])
+
+  // handleEvent must be defined before connect since connect uses it
+  const handleEvent = useCallback((eventType?: string, payload?: Record<string, unknown>) => {
+    if (!eventType || !payload) return
+
+    switch (eventType) {
+      case 'user':
+      case 'user_message':
+        addMessage('user', payload.content as string, payload)
+        break
+
+      case 'agent':
+      case 'agent_message':
+        addMessage('agent', payload.content as string, payload)
+        break
+
+      case 'tool_call':
+        addMessage('tool', `Tool: ${payload.tool || payload.tool_name}\nArgs: ${JSON.stringify(payload.args || payload.arguments, null, 2)}`, payload)
+        break
+
+      case 'tool_result':
+        addMessage('tool', `Result: ${JSON.stringify(payload.result, null, 2)}`, payload)
+        // Extract game state from tool results
+        const result = payload.result as { success?: boolean; data?: GameState }
+        if (result?.success && result?.data) {
+          const data = result.data
+          // Full status check - replace entire gameState
+          if (data.cash !== undefined && data.inventory !== undefined && data.stats !== undefined) {
+            setGameState(data)
+          }
+          // Partial update (e.g., serve_customers) - merge with existing state
+          else if (data.cash !== undefined || data.stats !== undefined) {
+            setGameState(prev => {
+              if (!prev) return data
+              return {
+                ...prev,
+                ...(data.cash !== undefined && { cash: data.cash }),
+                ...(data.stats !== undefined && { stats: { ...prev.stats, ...data.stats } }),
+              }
+            })
+          }
+        }
+        break
+
+      case 'step_started':
+      case 'step_completed':
+      case 'branch':
+        // Optional: show step/branch progress
+        break
+    }
+  }, [addMessage])
 
   const connect = useCallback(() => {
     // Close any existing connection first
@@ -122,6 +176,7 @@ export function useSession() {
       switch (data.type) {
         case 'started':
           setSessionId(data.session_id || null)
+          setDbSessionId(data.db_session_id || null)  // Store DB session ID for replay
           setState('running')
           addMessage('system', 'Session started')
           break
@@ -174,46 +229,7 @@ export function useSession() {
         setState('disconnected')
       }
     }
-  }, [addMessage])
-
-  const handleEvent = useCallback((eventType?: string, payload?: Record<string, unknown>) => {
-    if (!eventType || !payload) return
-
-    switch (eventType) {
-      case 'user':
-      case 'user_message':
-        addMessage('user', payload.content as string, payload)
-        break
-
-      case 'agent':
-      case 'agent_message':
-        addMessage('agent', payload.content as string, payload)
-        break
-
-      case 'tool_call':
-        addMessage('tool', `Tool: ${payload.tool || payload.tool_name}\nArgs: ${JSON.stringify(payload.args || payload.arguments, null, 2)}`, payload)
-        break
-
-      case 'tool_result':
-        addMessage('tool', `Result: ${JSON.stringify(payload.result, null, 2)}`, payload)
-        // Extract game state from check_status results
-        const result = payload.result as { success?: boolean; data?: GameState }
-        if (result?.success && result?.data) {
-          const data = result.data
-          // Update game state if this looks like a status check
-          if (data.cash !== undefined || data.inventory !== undefined) {
-            setGameState(data)
-          }
-        }
-        break
-
-      case 'step_started':
-      case 'step_completed':
-      case 'branch':
-        // Optional: show step/branch progress
-        break
-    }
-  }, [addMessage])
+  }, [addMessage, handleEvent])
 
   const startSession = useCallback((config: SessionConfig) => {
     if (wsRef.current?.readyState !== WebSocket.OPEN) {
@@ -298,6 +314,7 @@ export function useSession() {
   return {
     state,
     sessionId,
+    dbSessionId,  // Database session ID for replay/sharing
     messages,
     awaitingPrompt,
     evaluation,

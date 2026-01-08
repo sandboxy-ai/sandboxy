@@ -1,12 +1,12 @@
 import { Link } from 'react-router-dom'
-import { Play, Shield, BarChart3, Gamepad2, Github, ChevronRight, Zap, Bot, Target, Sparkles, ArrowRight } from 'lucide-react'
+import { Play, Shield, BarChart3, Gamepad2, Github, ChevronRight, Bot, Target, Sparkles, ArrowRight } from 'lucide-react'
 import { useModules } from '../hooks/useModules'
 
 export default function LandingPage() {
   const { modules } = useModules()
 
-  // Featured scenarios
-  const featuredScenarios = modules.slice(0, 3)
+  // Featured simulations
+  const featuredSimulations = modules.slice(0, 3)
 
   return (
     <div className="min-h-screen overflow-hidden">
@@ -47,7 +47,7 @@ export default function LandingPage() {
 
           {/* Subheadline */}
           <p className="text-xl text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed">
-            Run AI agents through simulated scenarios. Find vulnerabilities,
+            Run AI agents through interactive simulations. Find vulnerabilities,
             benchmark performance, or watch them hilariously fail at running
             a lemonade stand.
           </p>
@@ -55,11 +55,11 @@ export default function LandingPage() {
           {/* CTA buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
-              to="/scenarios"
+              to="/simulations"
               className="group inline-flex items-center justify-center gap-2 bg-gradient-to-r from-accent to-accent-hover hover:from-accent-hover hover:to-accent text-white font-semibold px-8 py-4 rounded-xl transition-all shadow-lg shadow-accent/25 hover:shadow-accent/40 hover:scale-105"
             >
               <Play size={20} />
-              Try a Scenario
+              Try a Simulation
               <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
             </Link>
             <a
@@ -77,7 +77,7 @@ export default function LandingPage() {
           <div className="flex justify-center gap-12 mt-16 pt-8 border-t border-white/5">
             <div className="text-center">
               <div className="text-3xl font-bold text-white">5+</div>
-              <div className="text-sm text-gray-500 mt-1">Scenarios</div>
+              <div className="text-sm text-gray-500 mt-1">Simulations</div>
             </div>
             <div className="text-center">
               <div className="text-3xl font-bold text-white">6</div>
@@ -197,17 +197,17 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Featured Scenarios */}
-      {featuredScenarios.length > 0 && (
+      {/* Featured Simulations */}
+      {featuredSimulations.length > 0 && (
         <section className="py-20 px-8">
           <div className="max-w-6xl mx-auto">
             <div className="flex items-center justify-between mb-12">
               <div>
-                <h2 className="text-4xl font-bold text-white mb-3">Featured Scenarios</h2>
-                <p className="text-gray-400 text-lg">Try one of our most popular scenarios</p>
+                <h2 className="text-4xl font-bold text-white mb-3">Featured Simulations</h2>
+                <p className="text-gray-400 text-lg">Try one of our most popular simulations</p>
               </div>
               <Link
-                to="/scenarios"
+                to="/simulations"
                 className="group flex items-center gap-2 text-accent hover:text-accent-hover transition-colors font-medium"
               >
                 View All
@@ -216,7 +216,7 @@ export default function LandingPage() {
             </div>
 
             <div className="grid md:grid-cols-3 gap-6">
-              {featuredScenarios.map((module, index) => (
+              {featuredSimulations.map((module, index) => (
                 <Link
                   key={module.id}
                   to={`/session/${module.slug}`}
@@ -270,7 +270,7 @@ export default function LandingPage() {
 
           <div className="grid md:grid-cols-4 gap-8">
             {[
-              { num: '01', title: 'Choose a Scenario', desc: 'Pick from our library or create your own using YAML' },
+              { num: '01', title: 'Choose a Simulation', desc: 'Pick from our library or create your own using YAML' },
               { num: '02', title: 'Configure Variables', desc: 'Adjust difficulty, agent model, and parameters' },
               { num: '03', title: 'Run & Interact', desc: 'Watch the agent work, inject events, or chat' },
               { num: '04', title: 'Review Results', desc: 'See scores, export data, and share results' },
@@ -306,16 +306,16 @@ export default function LandingPage() {
                 Ready to Test Your AI?
               </h2>
               <p className="text-gray-300 mb-8 text-lg max-w-lg mx-auto">
-                Start with a pre-built scenario or create your own.
+                Start with a pre-built simulation or create your own.
                 No account required.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Link
-                  to="/scenarios"
+                  to="/simulations"
                   className="group inline-flex items-center justify-center gap-2 bg-white text-dark-bg font-semibold px-8 py-4 rounded-xl transition-all hover:bg-gray-100 shadow-lg"
                 >
                   <Play size={20} />
-                  Browse Scenarios
+                  Browse Simulations
                   <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
                 </Link>
                 <Link
@@ -353,7 +353,7 @@ export default function LandingPage() {
             <a href="https://discord.gg/sandboxy" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white transition-colors">
               Discord
             </a>
-            <span className="text-gray-600">MIT License</span>
+            <span className="text-gray-600">Apache 2.0</span>
           </div>
         </div>
       </footer>
