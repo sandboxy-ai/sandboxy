@@ -1,0 +1,118 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: dark;
+  color: #e2e8f0;
+  background-color: #0b1117;
+
+  --app-bg: #0b1117;
+  --app-panel: rgba(15, 23, 42, 0.7);
+  --app-panel-solid: #0f172a;
+  --app-border: rgba(148, 163, 184, 0.18);
+  --app-text: #e2e8f0;
+  --app-muted: #94a3b8;
+  --app-accent: #fb923c;
+  --app-accent-strong: #f97316;
+  --app-warm: #f59e0b;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: var(--app-bg);
+  background-image: linear-gradient(180deg, rgba(15, 23, 42, 0.35) 0%, rgba(11, 17, 23, 0) 55%);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+code,
+pre,
+.font-mono {
+  font-family: 'DM Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  color: var(--app-text);
+}
+
+.sidebar {
+  width: 17rem;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.96) 0%, rgba(2, 6, 23, 0.98) 100%);
+  border-right: 1px solid var(--app-border);
+  box-shadow: inset -1px 0 0 rgba(148, 163, 184, 0.08);
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.9rem;
+  border-radius: 12px;
+  color: var(--app-muted);
+  transition: all 180ms ease;
+}
+
+.nav-link:hover {
+  color: var(--app-text);
+  background-color: rgba(148, 163, 184, 0.1);
+}
+
+.nav-link[data-active="true"] {
+  color: #0b1117;
+  background: linear-gradient(120deg, var(--app-accent) 0%, var(--app-accent-strong) 100%);
+  box-shadow: 0 10px 25px rgba(14, 165, 233, 0.25);
+}
+
+.page {
+  animation: pageFade 520ms ease-out;
+}
+
+.panel-card {
+  background: var(--app-panel);
+  border: 1px solid var(--app-border);
+  border-radius: 16px;
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.25);
+  backdrop-filter: blur(10px);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.panel-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgba(2, 6, 23, 0.28);
+}
+
+.panel-solid {
+  background: var(--app-panel-solid);
+  border: 1px solid var(--app-border);
+  border-radius: 16px;
+}
+
+.panel-subtle {
+  background: rgba(2, 6, 23, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 14px;
+}
+
+@keyframes pageFade {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
