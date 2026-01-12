@@ -141,7 +141,7 @@ export interface CompareModelsResponse {
   stats: Record<string, ModelStats>
   ranking: string[]
   winner: string | null
-  results?: RunScenarioResponse[]  // Individual run results
+  results?: RunScenarioResponse[]
 }
 
 export interface RunResult {
@@ -150,6 +150,88 @@ export interface RunResult {
   scenario_id: string
   timestamp: string
   metadata: Record<string, unknown>
+}
+
+export interface DatasetInfo {
+  id: string
+  name: string
+  description: string
+  case_count: number
+  path: string
+  relative_path: string
+}
+
+export interface DatasetCase {
+  id: string
+  expected: string[]
+  variables: Record<string, unknown>
+  tool_responses: Record<string, unknown>
+  tags: string[]
+}
+
+export interface DatasetDetail {
+  id: string
+  name: string
+  description: string
+  scenario_id: string | null
+  cases: DatasetCase[]
+  generator: Record<string, unknown> | null
+  path: string
+}
+
+export interface ScenarioGoalInfo {
+  id: string
+  name: string
+  description: string
+  outcome: boolean
+}
+
+export interface ScenarioToolAction {
+  name: string
+  description: string
+}
+
+export interface ScenarioToolInfo {
+  name: string
+  description: string
+  actions: ScenarioToolAction[]
+}
+
+export interface RunDatasetRequest {
+  scenario_id: string
+  dataset_id: string
+  model: string
+  max_turns?: number
+  max_tokens?: number
+  temperature?: number
+  parallel?: number
+}
+
+export interface CaseResultInfo {
+  case_id: string
+  expected: string[]
+  actual_outcome: string | null
+  passed: boolean
+  goal_score: number
+  max_score: number
+  percentage: number
+  failure_reason: string | null
+  latency_ms: number
+}
+
+export interface RunDatasetResponse {
+  scenario_id: string
+  model: string
+  dataset_id: string
+  total_cases: number
+  passed_cases: number
+  failed_cases: number
+  pass_rate: number
+  avg_score: number
+  avg_percentage: number
+  by_expected: Record<string, { passed: number; failed: number }>
+  total_time_ms: number
+  case_results: CaseResultInfo[]
 }
 
 class ApiClient {
@@ -170,12 +252,10 @@ class ApiClient {
     return response.json()
   }
 
-  // Status
   async getStatus(): Promise<LocalStatus> {
     return this.fetch<LocalStatus>('/local/status')
   }
 
-  // Scenarios
   async listScenarios(): Promise<LocalFileInfo[]> {
     return this.fetch<LocalFileInfo[]>('/local/scenarios')
   }
@@ -184,7 +264,14 @@ class ApiClient {
     return this.fetch<ScenarioDetail>(`/local/scenarios/${encodeURIComponent(id)}`)
   }
 
-  // Tools
+  async getScenarioGoals(id: string): Promise<ScenarioGoalInfo[]> {
+    return this.fetch<ScenarioGoalInfo[]>(`/local/scenarios/${encodeURIComponent(id)}/goals`)
+  }
+
+  async getScenarioTools(id: string): Promise<ScenarioToolInfo[]> {
+    return this.fetch<ScenarioToolInfo[]>(`/local/scenarios/${encodeURIComponent(id)}/tools`)
+  }
+
   async listTools(): Promise<LocalFileInfo[]> {
     return this.fetch<LocalFileInfo[]>('/local/tools')
   }
@@ -193,7 +280,6 @@ class ApiClient {
     return this.fetch<Record<string, unknown>>(`/local/tools/${encodeURIComponent(id)}`)
   }
 
-  // Agents
   async listAgents(): Promise<LocalFileInfo[]> {
     return this.fetch<LocalFileInfo[]>('/local/agents')
   }
@@ -202,12 +288,10 @@ class ApiClient {
     return this.fetch<Record<string, unknown>>(`/local/agents/${encodeURIComponent(id)}`)
   }
 
-  // Models
   async listModels(): Promise<ModelInfo[]> {
     return this.fetch<ModelInfo[]>('/local/models')
   }
 
-  // Runs
   async listRuns(): Promise<RunResult[]> {
     return this.fetch<RunResult[]>('/local/runs')
   }
@@ -216,7 +300,6 @@ class ApiClient {
     return this.fetch<Record<string, unknown>>(`/local/runs/${encodeURIComponent(filename)}`)
   }
 
-  // Execute scenarios
   async runScenario(request: RunScenarioRequest): Promise<RunScenarioResponse> {
     return this.fetch<RunScenarioResponse>('/local/run', {
       method: 'POST',
@@ -226,6 +309,41 @@ class ApiClient {
 
   async compareModels(request: CompareModelsRequest): Promise<CompareModelsResponse> {
     return this.fetch<CompareModelsResponse>('/local/compare', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
+  }
+
+  async listDatasets(): Promise<DatasetInfo[]> {
+    return this.fetch<DatasetInfo[]>('/local/datasets')
+  }
+
+  async getDataset(id: string): Promise<DatasetDetail> {
+    return this.fetch<DatasetDetail>(`/local/datasets/${encodeURIComponent(id)}`)
+  }
+
+  async saveDataset(id: string, content: string): Promise<{ id: string; path: string; message: string }> {
+    return this.fetch<{ id: string; path: string; message: string }>('/local/datasets', {
+      method: 'POST',
+      body: JSON.stringify({ id, content }),
+    })
+  }
+
+  async updateDataset(id: string, content: string): Promise<{ id: string; path: string; message: string }> {
+    return this.fetch<{ id: string; path: string; message: string }>(`/local/datasets/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ id, content }),
+    })
+  }
+
+  async deleteDataset(id: string): Promise<{ message: string }> {
+    return this.fetch<{ message: string }>(`/local/datasets/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    })
+  }
+
+  async runDataset(request: RunDatasetRequest): Promise<RunDatasetResponse> {
+    return this.fetch<RunDatasetResponse>('/local/run-dataset', {
       method: 'POST',
       body: JSON.stringify(request),
     })

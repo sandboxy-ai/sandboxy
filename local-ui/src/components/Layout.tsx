@@ -1,10 +1,11 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
-import { Home, FileText, Wrench } from 'lucide-react'
+import { Home, FileText, Wrench, Database } from 'lucide-react'
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: Home },
   { path: '/results', label: 'Results', icon: FileText },
   { path: '/builder', label: 'Builder', icon: Wrench },
+  { path: '/datasets', label: 'Datasets', icon: Database },
 ]
 
 export default function Layout() {
