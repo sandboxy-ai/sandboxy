@@ -9,9 +9,7 @@ description = "Open-source agent simulation and benchmarking platform"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12"
-authors = [
-    { name = "Sandboxy Team" }
-]
+authors = [{ name = "Sandboxy Team" }]
 keywords = ["ai", "agents", "simulation", "benchmarking", "llm"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -27,6 +25,7 @@ dependencies = [
     "click>=8.0",
     "pydantic>=2.0",
     "python-dotenv>=1.0.0",
+    "simpleeval>=1.0.0",    # Safe expression evaluation
     # LLM providers
     "openai>=1.0",
     "anthropic>=0.18.0",
@@ -49,6 +48,11 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-cov>=4.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-xdist>=3.5.0",
+    "pytest-timeout>=2.2.0",
+    "pytest-mock>=3.12.0",
+    "respx>=0.21.0",
     "mypy>=1.0",
     "ruff>=0.1",
     "types-PyYAML",
@@ -65,12 +69,49 @@ Repository = "https://github.com/sandboxy-ai/sandboxy"
 [tool.hatch.build.targets.wheel]
 packages = ["sandboxy"]
 
+# Include the bundled local UI assets if they exist
+[tool.hatch.build.targets.wheel.force-include]
+"sandboxy/ui/dist" = "sandboxy/ui/dist"
+
 [tool.ruff]
 target-version = "py312"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP"]
+select = [
+    "F", # pyflakes
+    # pycodestyle
+    "W", # warnings
+    "E", # errors
+
+    "C90", # mccabe
+    "B",   # bugbear
+    "S",   # flake8-bandit
+
+    "C4",  # flake8-comprehensions
+    "D",   # pydocstyle
+    "EM",  # flake8-errmsg
+    "I",   # isort
+    "PT",  # pytest
+    "Q",   # flake8-quotes
+    "RET", # flake8-return
+    "SIM", # flake8-simplify
+    "UP",  # pyupgrade
+]
+ignore = [
+    "D105",  # missing docstring in magic method
+    "E501",  # line too long
+    "S101",  # use of assert detected,
+    "EM101",
+    "B008",
+    "C901",  # too complex
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["D", "S311"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 [tool.mypy]
 python_version = "3.12"
@@ -81,11 +122,45 @@ warn_unused_configs = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "e2e: marks tests as end-to-end tests",
+    "requires_api_key: marks tests requiring real API keys",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::pytest.PytestUnraisableExceptionWarning",
+]
+addopts = ["-v", "--strict-markers", "--tb=short"]
+
+[tool.coverage.run]
+source = ["sandboxy"]
+branch = true
+omit = ["sandboxy/ui/*", "sandboxy/cli/*", "*/__pycache__/*", "*/tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
+show_missing = true
 
 [dependency-groups]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=4.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-xdist>=3.5.0",
+    "pytest-timeout>=2.2.0",
+    "pytest-mock>=3.12.0",
+    "respx>=0.21.0",
     "mypy>=1.0",
     "ruff>=0.1",
     "types-PyYAML",

@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { FileText, Clock, Play, Eye, Search, Filter, ChevronDown, ChevronRight, GitCompare, Zap } from 'lucide-react'
-import { RunScenarioResponse, CompareModelsResponse } from '../lib/api'
+import { FileText, Clock, Play, Eye, Search, Filter, ChevronDown, ChevronRight, GitCompare, Zap, Database, Check, X, Copy } from 'lucide-react'
+import { RunScenarioResponse, CompareModelsResponse, RunDatasetResponse } from '../lib/api'
 import { SingleRunResult, ComparisonResult } from '../components/ResultDisplay'
 
 interface RunResult {
@@ -12,19 +12,24 @@ interface RunResult {
   metadata: Record<string, unknown>
 }
 
-type ResultTypeFilter = 'all' | 'single' | 'comparison'
+type ResultTypeFilter = 'all' | 'single' | 'comparison' | 'dataset'
 
 // Helper to detect if a result is a comparison based on filename
 const isComparisonResult = (result: RunResult): boolean => {
   return result.scenario_id.endsWith('_comparison') || result.filename.includes('_comparison_')
 }
 
-// Get base scenario name without _comparison suffix
-const getBaseScenarioId = (scenarioId: string): string => {
-  return scenarioId.replace(/_comparison$/, '')
+// Helper to detect if a result is a dataset benchmark
+const isDatasetResult = (result: RunResult): boolean => {
+  return result.scenario_id.includes('_dataset_') || result.filename.includes('_dataset_')
 }
 
-// The stored result format - can be either a single run or comparison
+// Get base scenario name without _comparison or _dataset_* suffix
+const getBaseScenarioId = (scenarioId: string): string => {
+  return scenarioId.replace(/_comparison$/, '').replace(/_dataset_.*$/, '')
+}
+
+// The stored result format - can be single run, comparison, or dataset benchmark
 interface StoredResult {
   scenario_id: string
   timestamp?: string
@@ -41,6 +46,17 @@ interface StoredResult {
   history?: unknown[]
   tool_calls?: unknown[]
   evaluation?: unknown
+  // Dataset benchmark fields
+  dataset_id?: string
+  total_cases?: number
+  passed_cases?: number
+  failed_cases?: number
+  pass_rate?: number
+  avg_score?: number
+  avg_percentage?: number
+  by_expected?: Record<string, { passed: number; failed: number }>
+  total_time_ms?: number
+  case_results?: unknown[]
 }
 
 export default function ResultsPage() {
@@ -50,6 +66,7 @@ export default function ResultsPage() {
   const [selectedResult, setSelectedResult] = useState<StoredResult | null>(null)
   const [viewingFile, setViewingFile] = useState<string | null>(null)
   const [showJson, setShowJson] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   // Filter state
   const [searchQuery, setSearchQuery] = useState('')
@@ -83,8 +100,10 @@ export default function ResultsPage() {
       // Type filter
       if (typeFilter !== 'all') {
         const isComparison = isComparisonResult(result)
+        const isDataset = isDatasetResult(result)
         if (typeFilter === 'comparison' && !isComparison) return false
-        if (typeFilter === 'single' && isComparison) return false
+        if (typeFilter === 'dataset' && !isDataset) return false
+        if (typeFilter === 'single' && (isComparison || isDataset)) return false
       }
 
       return true
@@ -135,9 +154,25 @@ export default function ResultsPage() {
     }
   }
 
+  const copyJson = async () => {
+    if (!selectedResult) return
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(selectedResult, null, 2))
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
+  }
+
   // Helper to detect result type and extract data
-  const getResultType = (data: StoredResult | null): 'single' | 'comparison' | 'unknown' => {
+  const getResultType = (data: StoredResult | null): 'single' | 'comparison' | 'dataset' | 'unknown' => {
     if (!data) return 'unknown'
+
+    // Check if it's a dataset benchmark (has case_results)
+    const caseResults = data.case_results || (data.result as Record<string, unknown>)?.case_results
+    const datasetId = data.dataset_id || (data.result as Record<string, unknown>)?.dataset_id
+    if (caseResults || datasetId) return 'dataset'
 
     // Check if it's a comparison (has ranking)
     const ranking = data.ranking || (data.result as Record<string, unknown>)?.ranking
@@ -185,6 +220,26 @@ export default function ResultsPage() {
       ranking: (inner.ranking as string[]) || [],
       winner: (inner.winner as string | null) || null,
       results: (inner.results as CompareModelsResponse['results']) || [],
+    }
+  }
+
+  // Convert stored result to DatasetResult format
+  const toDatasetResult = (data: StoredResult): RunDatasetResponse => {
+    // Data might be at top level or nested in result
+    const inner = (data.result as Record<string, unknown>) || data
+    return {
+      scenario_id: (inner.scenario_id as string) || data.scenario_id || '',
+      model: (inner.model as string) || '',
+      dataset_id: (inner.dataset_id as string) || '',
+      total_cases: (inner.total_cases as number) || 0,
+      passed_cases: (inner.passed_cases as number) || 0,
+      failed_cases: (inner.failed_cases as number) || 0,
+      pass_rate: (inner.pass_rate as number) || 0,
+      avg_score: (inner.avg_score as number) || 0,
+      avg_percentage: (inner.avg_percentage as number) || 0,
+      by_expected: (inner.by_expected as Record<string, { passed: number; failed: number }>) || {},
+      total_time_ms: (inner.total_time_ms as number) || 0,
+      case_results: (inner.case_results as RunDatasetResponse['case_results']) || [],
     }
   }
 
@@ -244,20 +299,20 @@ export default function ResultsPage() {
               </div>
 
               {/* Type Filter Tabs */}
-              <div className="flex gap-1 p-1 bg-slate-900/60 rounded-lg border border-slate-700/50">
+              <div className="flex flex-wrap gap-1 p-1 bg-slate-900/60 rounded-lg border border-slate-700/50">
                 <button
                   onClick={() => setTypeFilter('all')}
-                  className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  className={`flex-1 min-w-0 px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${
                     typeFilter === 'all'
                       ? 'bg-slate-700/80 text-slate-100'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  All ({results.length})
+                  All
                 </button>
                 <button
                   onClick={() => setTypeFilter('single')}
-                  className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-1 ${
+                  className={`flex-1 min-w-0 px-2 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-1 ${
                     typeFilter === 'single'
                       ? 'bg-slate-700/80 text-slate-100'
                       : 'text-slate-400 hover:text-slate-200'
@@ -268,7 +323,7 @@ export default function ResultsPage() {
                 </button>
                 <button
                   onClick={() => setTypeFilter('comparison')}
-                  className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-1 ${
+                  className={`flex-1 min-w-0 px-2 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-1 ${
                     typeFilter === 'comparison'
                       ? 'bg-slate-700/80 text-slate-100'
                       : 'text-slate-400 hover:text-slate-200'
@@ -276,6 +331,17 @@ export default function ResultsPage() {
                 >
                   <GitCompare size={12} />
                   Compare
+                </button>
+                <button
+                  onClick={() => setTypeFilter('dataset')}
+                  className={`flex-1 min-w-0 px-2 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-1 ${
+                    typeFilter === 'dataset'
+                      ? 'bg-blue-600/80 text-slate-100'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Database size={12} />
+                  Dataset
                 </button>
               </div>
             </div>
@@ -332,6 +398,7 @@ export default function ResultsPage() {
                         <div className="border-t border-slate-800/50">
                           {scenarioResults.map((result) => {
                             const isComparison = isComparisonResult(result)
+                            const isDataset = isDatasetResult(result)
 
                             return (
                               <div
@@ -344,10 +411,12 @@ export default function ResultsPage() {
                                 onClick={() => viewResult(result.filename)}
                               >
                                 <div className="flex items-center gap-2 min-w-0">
-                                  {isComparison ? (
+                                  {isDataset ? (
+                                    <Database size={14} className="text-blue-400 flex-shrink-0" />
+                                  ) : isComparison ? (
                                     <GitCompare size={14} className="text-purple-400 flex-shrink-0" />
                                   ) : (
-                                    <Zap size={14} className="text-blue-400 flex-shrink-0" />
+                                    <Zap size={14} className="text-orange-400 flex-shrink-0" />
                                   )}
                                   <div className="min-w-0">
                                     <p className="text-xs text-slate-400 flex items-center gap-1">
@@ -382,10 +451,10 @@ export default function ResultsPage() {
               <div className="space-y-4">
                 {/* Header */}
                 <div className="panel-card p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="font-semibold text-slate-100">
-                        {selectedResult.scenario_id}
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <h2 className="font-semibold text-slate-100 truncate">
+                        {getBaseScenarioId(selectedResult.scenario_id)}
                       </h2>
                       {resultType === 'single' && toSingleRunResult(selectedResult).model && (
                         <p className="text-sm text-slate-400 mt-1">
@@ -397,17 +466,33 @@ export default function ResultsPage() {
                           Model Comparison
                         </p>
                       )}
+                      {resultType === 'dataset' && (
+                        <p className="text-sm text-slate-400 mt-1">
+                          Dataset: {toDatasetResult(selectedResult).dataset_id} | Model: {toDatasetResult(selectedResult).model}
+                        </p>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        onClick={copyJson}
+                        className={`flex items-center gap-1 text-xs px-2 py-1 border rounded whitespace-nowrap transition-colors ${
+                          copied
+                            ? 'text-emerald-400 border-emerald-500/50 bg-emerald-500/10'
+                            : 'text-slate-400 hover:text-slate-100 border-slate-700/70'
+                        }`}
+                      >
+                        <Copy size={12} />
+                        {copied ? 'Copied!' : 'Copy JSON'}
+                      </button>
                       <button
                         onClick={() => setShowJson(!showJson)}
-                        className="text-xs text-slate-400 hover:text-slate-100 px-2 py-1 border border-slate-700/70 rounded"
+                        className="text-xs text-slate-400 hover:text-slate-100 px-2 py-1 border border-slate-700/70 rounded whitespace-nowrap"
                       >
                         {showJson ? 'View Details' : 'View JSON'}
                       </button>
                       <Link
-                        to={`/run/${selectedResult.scenario_id.replace(/_comparison$/, '')}`}
-                        className="flex items-center gap-1 bg-orange-400 hover:bg-orange-300 text-slate-900 px-3 py-1 rounded text-sm font-semibold"
+                        to={`/run/${getBaseScenarioId(selectedResult.scenario_id)}`}
+                        className="flex items-center gap-1 bg-orange-400 hover:bg-orange-300 text-slate-900 px-3 py-1 rounded text-sm font-semibold whitespace-nowrap"
                       >
                         <Play size={14} />
                         Run Again
@@ -431,6 +516,9 @@ export default function ResultsPage() {
                     {resultType === 'comparison' && (
                       <ComparisonResult comparison={toComparisonResult(selectedResult)} />
                     )}
+                    {resultType === 'dataset' && (
+                      <DatasetBenchmarkResult result={toDatasetResult(selectedResult)} />
+                    )}
                     {resultType === 'unknown' && (
                       <div className="panel-card p-6 text-center">
                         <p className="text-slate-500">
@@ -450,6 +538,182 @@ export default function ResultsPage() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// Dataset benchmark result display component
+function DatasetBenchmarkResult({ result }: { result: RunDatasetResponse }) {
+  const [expandedCases, setExpandedCases] = useState<Set<string>>(new Set())
+
+  const toggleCase = (id: string) => {
+    const newExpanded = new Set(expandedCases)
+    if (newExpanded.has(id)) {
+      newExpanded.delete(id)
+    } else {
+      newExpanded.add(id)
+    }
+    setExpandedCases(newExpanded)
+  }
+
+  const passedCount = result.passed_cases
+  const totalCount = result.total_cases
+  const passRate = result.pass_rate
+
+  return (
+    <div className="space-y-4">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="panel-card p-4">
+          <div className="flex items-center gap-2 text-slate-400 mb-2">
+            <Database className="w-4 h-4" />
+            Cases Passed
+          </div>
+          <div className={`text-2xl font-bold ${passRate >= 0.9 ? 'text-emerald-300' : passRate >= 0.7 ? 'text-amber-300' : 'text-red-400'}`}>
+            {passedCount}/{totalCount}
+          </div>
+          <div className="text-xs text-slate-500">
+            {(passRate * 100).toFixed(1)}% pass rate
+          </div>
+        </div>
+
+        <div className="panel-card p-4">
+          <div className="flex items-center gap-2 text-slate-400 mb-2">
+            <Check className="w-4 h-4" />
+            Avg Score
+          </div>
+          <div className="text-2xl font-bold text-slate-100">
+            {result.avg_percentage.toFixed(1)}%
+          </div>
+          <div className="text-xs text-slate-500">
+            {result.avg_score.toFixed(1)} points
+          </div>
+        </div>
+
+        <div className="panel-card p-4">
+          <div className="flex items-center gap-2 text-slate-400 mb-2">
+            <Clock className="w-4 h-4" />
+            Total Time
+          </div>
+          <div className="text-2xl font-bold text-slate-100">
+            {(result.total_time_ms / 1000).toFixed(1)}s
+          </div>
+          <div className="text-xs text-slate-500">
+            {Math.round(result.total_time_ms / Math.max(totalCount, 1))}ms/case
+          </div>
+        </div>
+
+        <div className="panel-card p-4">
+          <div className="flex items-center gap-2 text-slate-400 mb-2">
+            <X className="w-4 h-4" />
+            Failed
+          </div>
+          <div className="text-2xl font-bold text-red-400">
+            {result.failed_cases}
+          </div>
+          <div className="text-xs text-slate-500">
+            {totalCount - passedCount} case{totalCount - passedCount !== 1 ? 's' : ''} failed
+          </div>
+        </div>
+      </div>
+
+      {/* By Expected Outcome */}
+      {Object.keys(result.by_expected).length > 0 && (
+        <div className="panel-card p-6">
+          <h3 className="font-semibold text-slate-100 mb-4">By Expected Outcome</h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {Object.entries(result.by_expected).map(([outcome, counts]) => {
+              const total = counts.passed + counts.failed
+              const rate = total > 0 ? counts.passed / total : 0
+              return (
+                <div key={outcome} className="panel-subtle p-3 rounded-lg">
+                  <div className="font-medium text-slate-200">{outcome}</div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className={`text-lg font-semibold ${rate >= 0.9 ? 'text-emerald-300' : rate >= 0.7 ? 'text-amber-300' : 'text-red-400'}`}>
+                      {counts.passed}/{total}
+                    </div>
+                    <span className="text-xs text-slate-500">
+                      ({(rate * 100).toFixed(0)}%)
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Case Results */}
+      <div className="panel-card p-6">
+        <h3 className="font-semibold text-slate-100 mb-4">
+          Case Results ({result.failed_cases} failed, {result.passed_cases} passed)
+        </h3>
+        <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+          {result.case_results.map((c) => (
+            <div
+              key={c.case_id}
+              className={`panel-subtle rounded-lg overflow-hidden ${
+                !c.passed ? 'border border-red-500/30' : ''
+              }`}
+            >
+              <button
+                onClick={() => toggleCase(c.case_id)}
+                className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-slate-700/50 transition-colors"
+              >
+                {c.passed ? (
+                  <Check size={16} className="text-emerald-400 flex-shrink-0" />
+                ) : (
+                  <X size={16} className="text-red-400 flex-shrink-0" />
+                )}
+                <span className="font-medium text-slate-200">{c.case_id}</span>
+                {c.expected && c.expected.length > 0 && (
+                  <span className="text-sm text-slate-400">
+                    expected: {c.expected.join(' or ')}
+                  </span>
+                )}
+                <span className="ml-auto text-sm text-slate-400 flex-shrink-0">
+                  {c.percentage.toFixed(0)}% | {c.latency_ms}ms
+                </span>
+                {expandedCases.has(c.case_id) ? (
+                  <ChevronDown size={14} className="text-slate-500 flex-shrink-0" />
+                ) : (
+                  <ChevronRight size={14} className="text-slate-500 flex-shrink-0" />
+                )}
+              </button>
+
+              {expandedCases.has(c.case_id) && (
+                <div className="px-4 pb-3 pt-1 border-t border-slate-700">
+                  {c.failure_reason && (
+                    <div className="text-red-400 text-sm mb-2 p-2 bg-red-950/30 rounded">
+                      {c.failure_reason}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-slate-500">Expected:</span>{' '}
+                      <span className="text-slate-200">
+                        {c.expected && c.expected.length > 0 ? c.expected.join(' or ') : 'N/A'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500">Actual:</span>{' '}
+                      <span className="text-slate-200">{c.actual_outcome || 'None'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500">Score:</span>{' '}
+                      <span className="text-slate-200">{c.goal_score}/{c.max_score}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500">Latency:</span>{' '}
+                      <span className="text-slate-200">{c.latency_ms}ms</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

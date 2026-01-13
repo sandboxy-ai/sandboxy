@@ -12,6 +12,7 @@ export default function RunPage() {
   const { scenarioId } = useParams<{ scenarioId: string }>()
   const [searchParams] = useSearchParams()
   const datasetIdFromUrl = searchParams.get('dataset')
+  const parallelFromUrl = parseInt(searchParams.get('parallel') || '5')
 
   const [scenarios, setScenarios] = useState<LocalFileInfo[]>([])
   const [scenario, setScenario] = useState<ScenarioDetail | null>(null)
@@ -30,6 +31,7 @@ export default function RunPage() {
   const [selectedDataset, setSelectedDataset] = useState<string>(datasetIdFromUrl || '')
   const [datasetResult, setDatasetResult] = useState<RunDatasetResponse | null>(null)
   const [datasetRunning, setDatasetRunning] = useState(false)
+  const [parallel, setParallel] = useState(parallelFromUrl)
 
   const { state, result, comparison, error: runError, runScenario, compareModels } = useScenarioRun()
 
@@ -100,6 +102,7 @@ export default function RunPage() {
           scenario_id: sid,
           dataset_id: selectedDataset,
           model: selectedModel,
+          parallel,
         })
         setDatasetResult(result)
       } catch (err) {
@@ -312,6 +315,26 @@ export default function RunPage() {
                 onChange={setSelectedModel}
                 disabled={datasetRunning}
               />
+            </div>
+
+            {/* Parallel runs */}
+            <div>
+              <label className="block text-sm font-medium text-slate-400 mb-2">
+                Parallel Runs
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={parallel}
+                  onChange={(e) => setParallel(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
+                  disabled={datasetRunning}
+                  className="w-20 panel-subtle px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
+                <span className="text-sm text-slate-500">concurrent cases</span>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">Higher = faster, but may hit rate limits</p>
             </div>
           </div>
         )}

@@ -201,6 +201,21 @@ export function SingleRunResult({ result }: { result: RunScenarioResponse }) {
   )
 }
 
+// Helper to format JSON strings nicely
+function formatJsonValue(value: unknown): string {
+  if (typeof value === 'string') {
+    // Try to parse and re-format if it's a JSON string
+    try {
+      const parsed = JSON.parse(value)
+      return JSON.stringify(parsed, null, 2)
+    } catch {
+      // Not valid JSON, return as-is
+      return value
+    }
+  }
+  return JSON.stringify(value, null, 2)
+}
+
 // Component for displaying tool call details with expandable result/error
 function ToolCallDetail({ call }: { call: { tool: string; action: string; args: Record<string, unknown>; result?: unknown; success: boolean; error?: string | null } }) {
   const [expanded, setExpanded] = useState(false)
@@ -228,7 +243,7 @@ function ToolCallDetail({ call }: { call: { tool: string; action: string; args: 
           <div>
             <div className="text-xs font-medium text-slate-500 mb-1">Arguments</div>
             <pre className="text-xs text-slate-400 overflow-auto bg-slate-950/50 rounded p-2">
-              {JSON.stringify(call.args, null, 2)}
+              {formatJsonValue(call.args)}
             </pre>
           </div>
 
@@ -237,7 +252,7 @@ function ToolCallDetail({ call }: { call: { tool: string; action: string; args: 
             <div>
               <div className="text-xs font-medium text-emerald-400 mb-1">Result</div>
               <pre className="text-xs text-slate-400 overflow-auto bg-emerald-950/30 rounded p-2 max-h-48">
-                {typeof call.result === 'string' ? call.result : JSON.stringify(call.result, null, 2)}
+                {formatJsonValue(call.result)}
               </pre>
             </div>
           )}

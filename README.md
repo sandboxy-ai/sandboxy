@@ -1,184 +1,203 @@
 # Sandboxy
 
-Open-source platform for testing and benchmarking AI agents in controlled, simulated environments.
+Open-source framework for developing, testing, and benchmarking AI agents in simulated environments.
 
 ## What is Sandboxy?
 
-Sandboxy lets you run AI agents through simulated scenarios to:
+Sandboxy provides a local development environment for building and testing AI agent scenarios. Define scenarios in YAML, run them against any LLM, and evaluate the results.
 
-- **Security Testing** - Test for prompt injection, social engineering vulnerabilities, and policy violations
-- **Benchmarking** - Compare AI models head-to-head with numeric scores
-- **Interactive Play** - Watch agents handle chaos, inject events, and create shareable content
-
-## Features
-
-- **MDL (Module Definition Language)** - Define scenarios in YAML with variables, steps, tools, and evaluation
-- **BYOA (Bring Your Own Agent)** - Plug in OpenAI, Anthropic, or custom agents
-- **Mock Tools** - Simulated systems (stores, email, browsers, games) for safe testing
-- **Event Injection** - Inject chaos mid-scenario to test agent adaptability
-- **Scoring System** - Custom formulas with normalization for fair comparison
-- **Web UI** - React-based interface for running scenarios and viewing results
-- **CLI** - Run benchmarks programmatically with CSV/JSON export
-
-## Scenarios Included
-
-| Scenario | Description | Use Case |
-|----------|-------------|----------|
-| **Lemonade Stand** | Run a lemonade business with inventory, weather, and events | Gaming/Benchmarking |
-| **Negotiation Arena** | Haggle for discounts without violating policies | Security/Gaming |
-| **Break the Bank** | Exploit refund policies (red-team) | Security Testing |
-| **Wedding Planner** | Handle bridezilla demands within budget | Entertainment/Viral |
-| **Social Engineering** | Defend secrets from manipulation | Security Testing |
+**Use cases:**
+- **Agent Development** - Build and iterate on AI agent behaviors locally
+- **Evaluation & Testing** - Run scenarios against models and score their performance
+- **Dataset Benchmarking** - Test models against datasets of cases with parallel execution
+- **Red-teaming** - Test for prompt injection, policy violations, and edge cases
 
 ## Quick Start
 
 ### Installation
 
-Using [uv](https://docs.astral.sh/uv/) (recommended):
-
 ```bash
-git clone https://github.com/sandboxy-ai/sandboxy.git
-cd sandboxy
-uv sync
-```
+# Using uv (recommended)
+pip install uv
+uv pip install sandboxy
 
-Using pip:
-
-```bash
+# Or with pip
 pip install sandboxy
 ```
 
 ### Set up API keys
 
 ```bash
-export OPENAI_API_KEY=your-key-here
-# or
-export ANTHROPIC_API_KEY=your-key-here
+# Create config directory
+mkdir -p ~/.sandboxy
+
+# Add your API key (OpenRouter gives access to 400+ models)
+echo "OPENROUTER_API_KEY=your-key-here" >> ~/.sandboxy/.env
+
+# Or use provider keys directly
+# echo "OPENAI_API_KEY=your-key-here" >> ~/.sandboxy/.env
+# echo "ANTHROPIC_API_KEY=your-key-here" >> ~/.sandboxy/.env
+```
+
+### Initialize a project
+
+```bash
+mkdir my-evals && cd my-evals
+sandboxy init
+```
+
+This creates:
+```
+my-evals/
+├── scenarios/     # Your scenario YAML files
+├── tools/         # Custom tool definitions
+├── agents/        # Agent configurations (optional)
+├── datasets/      # Test case datasets
+└── runs/          # Output from runs
 ```
 
 ### Run a scenario
 
 ```bash
-# Interactive mode with web UI
-sandboxy-server
+# Run with a specific model
+sandboxy run scenarios/my_scenario.yml -m openai/gpt-4o
 
-# CLI mode
-sandboxy run modules/lemonade_stand_v1.yml --agent-id gpt4
+# Compare multiple models
+sandboxy run scenarios/my_scenario.yml -m openai/gpt-4o -m anthropic/claude-3.5-sonnet
+
+# Run against a dataset
+sandboxy run scenarios/my_scenario.yml --dataset datasets/cases.yml -m openai/gpt-4o
 ```
 
-### Benchmark multiple agents
+### Local development UI
 
 ```bash
-sandboxy bench modules/lemonade_stand_v1.yml \
-  --agents gpt4,claude,gpt35 \
-  --runs-per-agent 5 \
-  --output results.csv
+# Start the local dev server with UI
+sandboxy open
 ```
+
+Opens a browser with a local UI for browsing scenarios, running them, and viewing results.
+
+## Writing Scenarios
+
+Scenarios are YAML files that define agent interactions:
+
+```yaml
+id: customer-support
+name: "Customer Support Test"
+description: "Test how an agent handles a refund request"
+
+system_prompt: |
+  You are a customer support agent for TechCo.
+  Be helpful but follow company policy.
+
+user_prompt: |
+  I want a refund for my purchase. Order #12345.
+
+# Define tools the agent can use
+tools:
+  - name: lookup_order
+    description: "Look up order details"
+    params:
+      order_id:
+        type: string
+        required: true
+    returns: "Order details for {{order_id}}"
+
+# Evaluation criteria
+goals:
+  - name: acknowledged_request
+    description: "Agent acknowledged the refund request"
+    check:
+      type: contains
+      value: "refund"
+
+  - name: looked_up_order
+    description: "Agent used the lookup tool"
+    check:
+      type: tool_called
+      tool: lookup_order
+
+scoring:
+  max_score: 100
+```
+
+## CLI Reference
+
+```bash
+# Run scenarios
+sandboxy run <file.yml> -m <model>           # Run a scenario
+sandboxy run <file.yml> -m <model> --runs 5  # Multiple runs
+sandboxy run <file.yml> --dataset <data.yml> # Run against dataset
+
+# Development
+sandboxy open                    # Start local UI
+sandboxy serve                   # API server only (no browser)
+sandboxy init                    # Initialize project structure
+
+# Scaffolding
+sandboxy new scenario <name>     # Create scenario template
+sandboxy new tool <name>         # Create tool library template
+
+# Information
+sandboxy list-models             # List available models
+sandboxy list-tools              # List available tool libraries
+sandboxy info <file.yml>         # Show scenario details
+
+# MCP Integration
+sandboxy mcp inspect <command>   # Inspect MCP server tools
+sandboxy mcp list                # List known MCP servers
+```
+
+## Models
+
+Sandboxy supports 400+ models via OpenRouter, plus direct provider access:
+
+```bash
+# OpenRouter models (recommended)
+sandboxy run scenario.yml -m openai/gpt-4o
+sandboxy run scenario.yml -m anthropic/claude-3.5-sonnet
+sandboxy run scenario.yml -m google/gemini-pro
+sandboxy run scenario.yml -m meta-llama/llama-3-70b
+
+# List available models
+sandboxy list-models
+sandboxy list-models --search claude
+sandboxy list-models --free
+```
+
+## Configuration
+
+Environment variables (in `~/.sandboxy/.env` or project `.env`):
+
+| Variable | Description |
+|----------|-------------|
+| `OPENROUTER_API_KEY` | OpenRouter API key (400+ models) |
+| `OPENAI_API_KEY` | Direct OpenAI access |
+| `ANTHROPIC_API_KEY` | Direct Anthropic access |
 
 ## Project Structure
 
 ```
 sandboxy/
 ├── sandboxy/           # Python package
-│   ├── core/           # MDL parser, runners, state models
-│   ├── agents/         # Agent interface and LLM implementations
-│   ├── tools/          # Tool interface and mock tools
-│   ├── api/            # FastAPI server and WebSocket
-│   ├── session/        # Session management
-│   ├── db/             # SQLite database
-│   └── cli/            # Command-line interface
-├── frontend/           # React/TypeScript web UI
-├── modules/            # Scenario definitions (YAML)
-├── agents/             # Agent configurations (YAML)
-└── work/               # Development docs
-```
-
-## Creating Scenarios
-
-Scenarios are defined in YAML using MDL:
-
-```yaml
-id: My Scenario
-description: A simple example scenario
-
-variables:
-  - name: difficulty
-    type: slider
-    min: 1
-    max: 10
-    default: 5
-
-agent:
-  system_prompt: |
-    You are a helpful assistant.
-    Difficulty level: {{difficulty}}
-
-environment:
-  tools:
-    - name: calculator
-      type: mock_calculator
-
-steps:
-  - id: start
-    action: inject_user
-    params:
-      content: "Hello!"
-
-  - id: respond
-    action: await_agent
-    params: {}
-
-evaluation:
-  - name: Responded
-    kind: deterministic
-    config:
-      expr: "len(events) > 0"
-
-scoring:
-  formula: "Responded * 100"
-  normalize: true
-```
-
-## Configuration
-
-### Environment Variables
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `OPENAI_API_KEY` | OpenAI API key | For OpenAI agents |
-| `ANTHROPIC_API_KEY` | Anthropic API key | For Claude agents |
-| `SANDBOXY_HOST` | Server host | Default: 0.0.0.0 |
-| `SANDBOXY_PORT` | Server port | Default: 8000 |
-| `SANDBOXY_DISABLE_RATE_LIMIT` | Disable rate limiting | Default: false |
-
-## Development
-
-```bash
-# Install dev dependencies
-uv sync --dev
-
-# Run backend
-sandboxy-server
-
-# Run frontend (separate terminal)
-cd frontend
-npm install
-npm run dev
-
-# Run tests
-pytest
+│   ├── core/           # Runner, state management
+│   ├── scenarios/      # Unified scenario runner
+│   ├── datasets/       # Dataset benchmarking
+│   ├── agents/         # Agent loading and execution
+│   ├── tools/          # Tool loading (YAML tools)
+│   ├── providers/      # LLM provider integrations
+│   ├── api/            # Local dev API server
+│   ├── cli/            # Command-line interface
+│   ├── local/          # Local project context
+│   └── mcp/            # MCP client integration
+└── local-ui/           # Local development UI (React)
 ```
 
 ## Contributing
 
-Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-Apache License - see [LICENSE](LICENSE) for details.
-
-## Links
-
-- [Documentation](https://sandboxy.ai/docs)
-- [GitHub](https://github.com/sandboxy-ai/sandboxy)
-- [Discord](https://discord.gg/sandboxy)
+Apache 2.0 - see [LICENSE](LICENSE).

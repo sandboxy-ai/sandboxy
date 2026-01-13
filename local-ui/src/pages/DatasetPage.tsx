@@ -1000,6 +1000,8 @@ function DatasetDetailView({
   onEdit,
   onDelete,
 }: DatasetDetailViewProps) {
+  const [parallel, setParallel] = useState(5)
+
   return (
     <>
       <div className="flex items-center justify-between mb-4">
@@ -1043,13 +1045,27 @@ function DatasetDetailView({
 
       {dataset.cases.length > 0 && (
         <div className="mt-4 pt-4 border-t border-slate-700">
-          <Link
-            to={`/run?dataset=${dataset.id}`}
-            className="flex items-center gap-2 px-4 py-2 bg-orange-400 hover:bg-orange-300 text-slate-900 rounded-lg font-medium w-fit"
-          >
-            <Play size={16} />
-            Run All Cases
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link
+              to={`/run?dataset=${dataset.id}&parallel=${parallel}`}
+              className="flex items-center gap-2 px-4 py-2 bg-orange-400 hover:bg-orange-300 text-slate-900 rounded-lg font-medium"
+            >
+              <Play size={16} />
+              Run All Cases
+            </Link>
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-slate-400">Parallel:</label>
+              <input
+                type="number"
+                min={1}
+                max={20}
+                value={parallel}
+                onChange={(e) => setParallel(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
+                className="w-16 px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-200 text-sm"
+              />
+              <span className="text-xs text-slate-500">concurrent runs</span>
+            </div>
+          </div>
         </div>
       )}
     </>
