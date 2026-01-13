@@ -28,15 +28,8 @@ pip install sandboxy
 ### Set up API keys
 
 ```bash
-# Create config directory
-mkdir -p ~/.sandboxy
-
 # Add your API key (OpenRouter gives access to 400+ models)
-echo "OPENROUTER_API_KEY=your-key-here" >> ~/.sandboxy/.env
-
-# Or use provider keys directly
-# echo "OPENAI_API_KEY=your-key-here" >> ~/.sandboxy/.env
-# echo "ANTHROPIC_API_KEY=your-key-here" >> ~/.sandboxy/.env
+echo "OPENROUTER_API_KEY=your-key-here" >> .env
 ```
 
 ### Initialize a project
