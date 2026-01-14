@@ -65,10 +65,6 @@ Repository = "https://github.com/sandboxy-ai/sandboxy"
 [tool.hatch.build.targets.wheel]
 packages = ["sandboxy"]
 
-# Include the bundled local UI assets if they exist
-[tool.hatch.build.targets.wheel.force-include]
-"sandboxy/ui/dist" = "sandboxy/ui/dist"
-
 [tool.ruff]
 target-version = "py312"
 line-length = 100
