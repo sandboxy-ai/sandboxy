@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
+import logging
 import os
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -10,6 +10,8 @@ from typing import Any, Literal
 from pydantic import BaseModel
 
 from sandboxy.mcp.wrapper import McpToolWrapper
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -73,8 +75,7 @@ class McpManager:
         """
         if config.is_http():
             return await self._connect_http(config)
-        else:
-            return await self._connect_stdio(config)
+        return await self._connect_stdio(config)
 
     async def _connect_stdio(self, config: McpServerConfig) -> McpConnection:
         """Connect to a local MCP server via stdio."""
@@ -214,7 +215,7 @@ class McpManager:
                         all_tools[tool_name] = wrapper
             except Exception as e:
                 # Log error but continue with other servers
-                print(f"Warning: Failed to connect to MCP server '{config.name}': {e}")
+                logger.warning("Failed to connect to MCP server '%s': %s", config.name, e)
 
         return all_tools
 
@@ -227,7 +228,11 @@ class McpManager:
                 if connection._context:
                     await connection._context.__aexit__(None, None, None)
             except Exception:
-                pass
+                logger.debug(
+                    "Error during disconnect from MCP server '%s' (ignored)",
+                    connection.name,
+                    exc_info=True,
+                )
 
         self._connections.clear()
 

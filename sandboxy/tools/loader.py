@@ -1,18 +1,24 @@
-"""Tool loader - dynamically loads tool implementations from specs."""
+"""Tool loader - dynamically loads tool implementations from specs.
+
+This module handles:
+    - Loading tool specifications from YAML files
+    - Creating tool instances from environment configuration
+    - Loading YAML tool libraries
+"""
 
 from __future__ import annotations
 
 import importlib
+import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import yaml
 
 from sandboxy.core.state import EnvConfig
 from sandboxy.tools.base import BaseTool, Tool, ToolConfig
 
-if TYPE_CHECKING:
-    from sandboxy.tools.yaml_tools import YamlMockTool, YamlToolLoader as YTL
+logger = logging.getLogger(__name__)
 
 # Default directories to search for tool specs
 TOOLS_DIRS = [
@@ -28,9 +34,6 @@ YAML_TOOL_DIRS = [
 
 # Built-in tool mappings (type -> module:class)
 BUILTIN_TOOLS: dict[str, str] = {
-    "mock_shopify": "sandboxy.tools.mock_shopify:MockShopifyTool",
-    "mock_browser": "sandboxy.tools.mock_browser:MockBrowserTool",
-    "mock_email": "sandboxy.tools.mock_email:MockEmailTool",
     "mock_lemonade": "sandboxy.tools.mock_lemonade:MockLemonadeTool",
     "mock_store": "sandboxy.tools.mock_store:MockStoreTool",
     "mock_wedding": "sandboxy.tools.mock_wedding:MockWeddingTool",
@@ -60,14 +63,16 @@ def _load_tool_specs(dirs: list[Path] | None = None) -> dict[str, dict[str, Any]
                 raw = yaml.safe_load(path.read_text())
                 if raw and "type" in raw:
                     specs[raw["type"]] = raw
-            except yaml.YAMLError:
+            except yaml.YAMLError as e:
+                logger.warning("Failed to parse tool spec %s: %s", path, e)
                 continue
         for path in d.glob("**/*.yml"):
             try:
                 raw = yaml.safe_load(path.read_text())
                 if raw and "type" in raw:
                     specs[raw["type"]] = raw
-            except yaml.YAMLError:
+            except yaml.YAMLError as e:
+                logger.warning("Failed to parse tool spec %s: %s", path, e)
                 continue
 
     return specs
@@ -123,12 +128,12 @@ class ToolLoader:
             elif tool_ref.type in specs:
                 spec = specs[tool_ref.type]
                 if "impl" not in spec or "module" not in spec["impl"]:
-                    raise ValueError(
-                        f"Tool spec for '{tool_ref.type}' missing impl.module"
-                    )
+                    msg = f"Tool spec for '{tool_ref.type}' missing impl.module"
+                    raise ValueError(msg)
                 module_path = spec["impl"]["module"]
             else:
-                raise ValueError(f"Unknown tool type: {tool_ref.type}")
+                msg = f"Unknown tool type: {tool_ref.type}"
+                raise ValueError(msg)
 
             # Load and instantiate the tool class
             tool_cls = load_tool_class(module_path)
@@ -191,7 +196,8 @@ def get_yaml_tool_libraries(tool_dirs: list[Path] | None = None) -> list[str]:
                     raw = yaml.safe_load(path.read_text())
                     if raw and ("tools" in raw or path.stem.startswith("mock_")):
                         libraries.append(path.stem)
-                except yaml.YAMLError:
+                except yaml.YAMLError as e:
+                    logger.warning("Failed to parse tool library %s: %s", path, e)
                     continue
 
     return libraries

@@ -30,6 +30,7 @@ class AgentAction(BaseModel):
     tool_name: str | None = None
     tool_action: str | None = None
     tool_args: dict[str, Any] | None = None
+    tool_call_id: str | None = None
 
 
 class Agent(Protocol):

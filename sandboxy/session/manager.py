@@ -1,6 +1,7 @@
 """Session Manager - coordinates interactive sessions between WebSocket and AsyncRunner."""
 
 import asyncio
+import logging
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
@@ -8,6 +9,8 @@ from uuid import uuid4
 from sandboxy.agents.base import Agent
 from sandboxy.core.async_runner import AsyncRunner, RunEvent
 from sandboxy.core.state import ModuleSpec, SessionState
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -32,9 +35,7 @@ class Session:
 class SessionManager:
     """Manages active interactive sessions.
 
-    This is an in-memory session store. For production, you'd want to
-    persist sessions to a database and potentially distribute them
-    across multiple workers.
+    In-memory session store for local development and testing.
     """
 
     def __init__(self):
@@ -55,6 +56,7 @@ class SessionManager:
 
         Returns:
             The created Session object.
+
         """
         session_id = str(uuid4())
         runner = AsyncRunner(module, agent)
@@ -68,6 +70,7 @@ class SessionManager:
         )
 
         self._sessions[session_id] = session
+        logger.info("Created session %s for module %s", session_id, module.name)
         return session
 
     def get_session(self, session_id: str) -> Session | None:
@@ -79,6 +82,7 @@ class SessionManager:
 
         Returns:
             True if session was deleted, False if not found.
+
         """
         if session_id in self._sessions:
             session = self._sessions[session_id]
@@ -86,7 +90,9 @@ class SessionManager:
             if session._run_task and not session._run_task.done():
                 session._run_task.cancel()
             del self._sessions[session_id]
+            logger.info("Deleted session %s", session_id)
             return True
+        logger.debug("Attempted to delete non-existent session %s", session_id)
         return False
 
     def list_sessions(self) -> list[Session]:
@@ -104,32 +110,32 @@ class SessionManager:
 
         Raises:
             ValueError: If session not found.
+
         """
         session = self.get_session(session_id)
         if not session:
+            logger.warning("Attempted to start non-existent session %s", session_id)
             raise ValueError(f"Session not found: {session_id}")
 
         # Start the runner in a background task
         session._run_task = asyncio.create_task(self._run_session(session))
+        logger.info("Started session %s", session_id)
 
         return session._event_queue
 
     async def _run_session(self, session: Session) -> None:
         """Run a session, pushing events to its queue."""
+        logger.debug("Running session %s", session.id)
         try:
             async for event in session.runner.run():
                 session.events.append(event)
                 await session._event_queue.put(event)
-
-                # If awaiting input, wait for it to be provided before continuing
-                if event.type == "awaiting_input":
-                    # The caller should call provide_input() which will unblock the runner
-                    pass
+                logger.debug("Session %s emitted event: %s", session.id, event.type)
 
         except asyncio.CancelledError:
-            # Session was cancelled, that's fine
-            pass
+            logger.info("Session %s was cancelled", session.id)
         except Exception as e:
+            logger.exception("Session %s encountered error: %s", session.id, e)
             # Push error event
             error_event = RunEvent(type="error", payload={"message": str(e)})
             session.events.append(error_event)
@@ -145,11 +151,14 @@ class SessionManager:
         Raises:
             ValueError: If session not found.
             RuntimeError: If session is not awaiting input.
+
         """
         session = self.get_session(session_id)
         if not session:
+            logger.warning("Attempted to provide input to non-existent session %s", session_id)
             raise ValueError(f"Session not found: {session_id}")
 
+        logger.debug("Providing input to session %s", session_id)
         session.runner.provide_input(content)
 
     def inject_event(
@@ -176,26 +185,37 @@ class SessionManager:
 
         Raises:
             ValueError: If session not found or event fails.
+
         """
         session = self.get_session(session_id)
         if not session:
+            logger.warning("Attempted to inject event into non-existent session %s", session_id)
             raise ValueError(f"Session not found: {session_id}")
 
+        logger.info(
+            "Injecting event %s into session %s via tool %s",
+            event_type, session_id, tool_name
+        )
         return session.runner.inject_event(tool_name, event_type, args)
 
     def pause_session(self, session_id: str) -> bool:
         """Pause a session (not fully implemented yet)."""
         session = self.get_session(session_id)
         if not session:
+            logger.debug("Attempted to pause non-existent session %s", session_id)
             return False
-        # TODO: Implement proper pause
+        # TODO: Implement proper pause mechanism
+        logger.debug("Pause requested for session %s (not yet implemented)", session_id)
         return True
 
     def resume_session(self, session_id: str) -> bool:
         """Resume a paused session (not fully implemented yet)."""
         session = self.get_session(session_id)
         if not session:
+            logger.debug("Attempted to resume non-existent session %s", session_id)
             return False
+        # TODO: Implement proper resume mechanism
+        logger.debug("Resume requested for session %s (not yet implemented)", session_id)
         return True
 
     def mark_session_ended(self, session_id: str) -> bool:
@@ -210,15 +230,18 @@ class SessionManager:
 
         Returns:
             True if session was marked, False if not found.
+
         """
         session = self.get_session(session_id)
         if not session:
+            logger.debug("Attempted to mark non-existent session %s as ended", session_id)
             return False
 
         # Cancel running task if any
         if session._run_task and not session._run_task.done():
             session._run_task.cancel()
 
+        logger.info("Marked session %s as ended", session_id)
         return True
 
     def get_session_events(self, session_id: str) -> list[RunEvent]:
@@ -229,6 +252,7 @@ class SessionManager:
 
         Returns:
             List of events, or empty list if session not found.
+
         """
         session = self.get_session(session_id)
         if not session:
@@ -243,6 +267,7 @@ class SessionManager:
 
         Returns:
             The environment state dict, or None if session not found.
+
         """
         session = self.get_session(session_id)
         if not session:

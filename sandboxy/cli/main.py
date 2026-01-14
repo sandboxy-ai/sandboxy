@@ -205,9 +205,6 @@ def bench(
         click.echo(f"Benchmarking agent: {agent_id}")
 
         for run_idx in range(runs_per_agent):
-            # Generate run-specific seed for reproducibility
-            run_seed = seed + run_idx if seed is not None else None
-
             runner = Runner(module=module, agent=agent)
             result = runner.run()
 
@@ -219,9 +216,9 @@ def bench(
                 "status": result.evaluation.status,
             }
 
-            # Add seed if used
-            if run_seed is not None:
-                row["seed"] = run_seed
+            # Add seed if used for reproducibility tracking
+            if seed is not None:
+                row["seed"] = seed
 
             # Add env_state metrics if available
             if "cash_balance" in runner.env_state:
@@ -233,7 +230,7 @@ def bench(
 
             # Add all evaluation check results
             for check_name, check_result in result.evaluation.checks.items():
-                if isinstance(check_result, (int, float, bool)):
+                if isinstance(check_result, int | float | bool):
                     row[f"check_{check_name}"] = check_result
 
             results.append(row)
@@ -263,14 +260,17 @@ def bench(
             by_agent[str(r["agent_id"])].append(r)
 
         for agent_id, runs in by_agent.items():
-            scores = [r["score"] for r in runs if isinstance(r["score"], (int, float))]
+            scores = [r["score"] for r in runs if isinstance(r["score"], int | float)]
             avg_score = sum(scores) / len(scores) if scores else 0
             click.echo(f"{agent_id}:")
             click.echo(f"  Runs: {len(runs)}")
             click.echo(f"  Avg Score: {avg_score:.3f}")
             if "final_cash" in runs[0]:
-                cash_values = [r["final_cash"] for r in runs if "final_cash" in r]
-                avg_cash = sum(cash_values) / len(cash_values) if cash_values else 0  # type: ignore
+                cash_values = [
+                    float(r["final_cash"]) for r in runs
+                    if "final_cash" in r and isinstance(r["final_cash"], int | float)
+                ]
+                avg_cash = sum(cash_values) / len(cash_values) if cash_values else 0.0
                 click.echo(f"  Avg Final Cash: {avg_cash:.2f}")
             click.echo("")
 
@@ -503,8 +503,6 @@ def list_models(fetch: bool, free: bool, search: str | None) -> None:
         sandboxy list-models --free
         sandboxy list-models --fetch --search claude
     """
-    import os
-
     if fetch:
         # Fetch from OpenRouter API
         api_key = os.getenv("OPENROUTER_API_KEY", "")
@@ -546,8 +544,6 @@ def _display_popular_models(free_only: bool, search: str | None) -> None:
 
 def _fetch_and_display_models(free_only: bool, search: str | None) -> None:
     """Fetch and display models from OpenRouter API."""
-    import os
-
     try:
         import httpx
     except ImportError:
@@ -607,7 +603,7 @@ def _fetch_and_display_models(free_only: bool, search: str | None) -> None:
 
     for m in filtered[:50]:  # Limit output
         click.echo(f"  {m['id']}")
-        ctx = f"{m['context']//1000}k" if m['context'] >= 1000 else str(m['context'])
+        ctx = f"{m['context']//1000}k" if m["context"] >= 1000 else str(m["context"])
         click.echo(f"    {m['name']} [{m['price']}] [ctx: {ctx}]")
 
     if len(filtered) > 50:
@@ -621,7 +617,7 @@ def _fetch_and_display_models(free_only: bool, search: str | None) -> None:
 # Scaffolding Commands
 # -----------------------------------------------------------------------------
 
-SCENARIO_TEMPLATE = '''# {title}
+SCENARIO_TEMPLATE = """# {title}
 # {description}
 
 id: {id}
@@ -635,8 +631,7 @@ tags:
 
 # Import tools from libraries (optional)
 # tools_from:
-#   - mock_datacenter
-#   - mock_train
+#   - my_tool_library
 
 # Define inline tools
 tools:
@@ -725,9 +720,9 @@ goals:
 scoring:
   max_score: 30
   # Optional formula: "checked_status + took_action"
-'''
+"""
 
-TOOL_LIBRARY_TEMPLATE = '''# {title}
+TOOL_LIBRARY_TEMPLATE = """# {title}
 # {description}
 
 name: {name}
@@ -806,7 +801,7 @@ tools:
     side_effects:
       - set: "current_mode"
         value: "{{mode}}"
-'''
+"""
 
 
 @main.group()
@@ -912,8 +907,8 @@ def new_tool(name: str, title: str | None, description: str, output_dir: str) ->
     click.echo("")
     click.echo("Next steps:")
     click.echo(f"  1. Edit {file_path} to add your tools")
-    click.echo(f"  2. Use in scenarios with:")
-    click.echo(f"     tools_from:")
+    click.echo("  2. Use in scenarios with:")
+    click.echo("     tools_from:")
     click.echo(f"       - {lib_name}")
 
 
@@ -1076,7 +1071,7 @@ def mcp_list_servers() -> None:
         click.echo("")
 
     click.echo("Inspect a server's tools:")
-    click.echo("  sandboxy mcp inspect \"npx -y @modelcontextprotocol/server-filesystem /tmp\"")
+    click.echo('  sandboxy mcp inspect "npx -y @modelcontextprotocol/server-filesystem /tmp"')
     click.echo("")
     click.echo("More servers: https://github.com/modelcontextprotocol/servers")
 

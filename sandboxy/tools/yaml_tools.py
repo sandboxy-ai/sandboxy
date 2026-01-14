@@ -20,6 +20,7 @@ Example tool definition:
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 from typing import Any, Literal
@@ -29,6 +30,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from sandboxy.tools.base import ToolConfig, ToolResult
 
+logger = logging.getLogger(__name__)
 
 # -----------------------------------------------------------------------------
 # Schema Models
@@ -36,23 +38,41 @@ from sandboxy.tools.base import ToolConfig, ToolResult
 
 
 class ParamSchema(BaseModel):
-    """Schema for a tool parameter."""
+    """Schema for a tool parameter.
+
+    Attributes:
+        type: Parameter type (string, number, boolean, integer, array, object).
+        description: Human-readable description of the parameter.
+        required: Whether the parameter must be provided.
+        default: Default value if not provided.
+        enum: List of allowed values (for validation).
+    """
 
     type: Literal["string", "number", "boolean", "integer", "array", "object"] = "string"
     description: str = ""
     required: bool = False
     default: Any = None
-    enum: list[Any] | None = None  # Allowed values
+    enum: list[Any] | None = None
 
 
 class SideEffect(BaseModel):
-    """A side effect that modifies scenario state when a tool is called."""
+    """A side effect that modifies scenario state when a tool is called.
 
-    set: str  # State key to set (supports {param} substitution)
-    value: Any  # Value to set (supports {param} substitution)
+    Attributes:
+        set: State key to set (supports {param} substitution).
+        value: Value to set (supports {param} and {state.key} substitution).
+    """
+
+    set: str
+    value: Any
 
     def apply(self, state: dict[str, Any], params: dict[str, Any]) -> None:
-        """Apply this side effect to the state."""
+        """Apply this side effect to the state.
+
+        Args:
+            state: Environment state dict to modify.
+            params: Parameters from the tool invocation.
+        """
         key = _interpolate(self.set, params, state)
         value = self.value
 
@@ -64,26 +84,34 @@ class SideEffect(BaseModel):
 
 
 class ConditionalReturn(BaseModel):
-    """A conditional return value based on state."""
+    """A conditional return value based on state.
 
-    when: str  # Condition expression
-    value: str  # Return value if condition is true
+    Attributes:
+        when: Condition expression to evaluate.
+        value: Return value if condition is true.
+    """
+
+    when: str
+    value: str
 
 
 class ActionSpec(BaseModel):
-    """Specification for a single tool action."""
+    """Specification for a single tool action.
+
+    Attributes:
+        description: Human-readable description of the action.
+        params: Parameter definitions for this action.
+        returns: Return value (string or list of ConditionalReturn).
+        returns_error: Error message to return when error_when is true.
+        error_when: Condition expression that triggers an error.
+        side_effects: State modifications to apply on success.
+    """
 
     description: str = ""
     params: dict[str, ParamSchema] = Field(default_factory=dict)
-
-    # Return value - can be simple string, conditional list, or error
     returns: str | list[ConditionalReturn] = ""
-    returns_error: str | None = None  # Error message to return instead
-
-    # Conditions for error
-    error_when: str | None = None  # Expression - if true, return error
-
-    # Side effects
+    returns_error: str | None = None
+    error_when: str | None = None
     side_effects: list[SideEffect] = Field(default_factory=list)
 
     @field_validator("returns", mode="before")
@@ -93,10 +121,7 @@ class ActionSpec(BaseModel):
         if isinstance(v, str):
             return v
         if isinstance(v, list):
-            return [
-                ConditionalReturn(**item) if isinstance(item, dict) else item
-                for item in v
-            ]
+            return [ConditionalReturn(**item) if isinstance(item, dict) else item for item in v]
         if isinstance(v, dict) and "conditions" in v:
             # Support { conditions: [...] } format
             return [
@@ -230,8 +255,9 @@ def _evaluate_condition(expr: str, params: dict[str, Any], state: dict[str, Any]
             "float": float,
             "bool": bool,
         }
-        return bool(eval(expr, {"__builtins__": safe_builtins}, context))
-    except Exception:
+        return bool(eval(expr, {"__builtins__": safe_builtins}, context))  # noqa: S307
+    except Exception as e:
+        logger.debug("Condition evaluation failed for expression '%s': %s", expr, e)
         return False
 
 
@@ -298,18 +324,21 @@ class YamlMockTool:
             return validated_args  # Validation error
 
         # Log the call
-        self._call_log.append({
-            "action": action,
-            "args": validated_args.copy(),
-            "state_before": env_state.copy(),
-        })
+        self._call_log.append(
+            {
+                "action": action,
+                "args": validated_args.copy(),
+                "state_before": env_state.copy(),
+            }
+        )
 
         # Check for error condition
-        if action_spec.error_when:
-            if _evaluate_condition(action_spec.error_when, validated_args, env_state):
-                error_msg = action_spec.returns_error or "Operation failed"
-                error_msg = _interpolate(error_msg, validated_args, env_state)
-                return ToolResult(success=False, error=error_msg)
+        if action_spec.error_when and _evaluate_condition(
+            action_spec.error_when, validated_args, env_state
+        ):
+            error_msg = action_spec.returns_error or "Operation failed"
+            error_msg = _interpolate(error_msg, validated_args, env_state)
+            return ToolResult(success=False, error=error_msg)
 
         # Apply side effects
         for effect in action_spec.side_effects:
@@ -401,15 +430,17 @@ class YamlMockTool:
                 if param_schema.required:
                     required.append(param_name)
 
-            result.append({
-                "name": name,
-                "description": action_spec.description or self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": properties,
-                    "required": required,
-                },
-            })
+            result.append(
+                {
+                    "name": name,
+                    "description": action_spec.description or self.description,
+                    "parameters": {
+                        "type": "object",
+                        "properties": properties,
+                        "required": required,
+                    },
+                }
+            )
 
         return result
 
@@ -464,9 +495,8 @@ class YamlToolLoader:
                     self._library_cache[name] = library
                     return library
 
-        raise FileNotFoundError(
-            f"Tool library '{name}' not found in: {self.tool_dirs}"
-        )
+        msg = f"Tool library '{name}' not found in: {self.tool_dirs}"
+        raise FileNotFoundError(msg)
 
     def load_library_file(self, path: Path) -> ToolLibrary:
         """Load a tool library from a specific file path.
@@ -654,7 +684,7 @@ def load_scenario_tools(
             library = loader.load_library(lib_name)
             all_specs.update(library.tools)
         except FileNotFoundError:
-            pass  # Silently skip missing libraries for now
+            logger.warning("Tool library '%s' not found, skipping", lib_name)
 
     # Load inline tools (override library tools)
     inline_tools = scenario_data.get("tools", {})

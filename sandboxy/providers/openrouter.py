@@ -1,13 +1,17 @@
 """OpenRouter provider - unified API for 400+ models."""
 
+import json
+import logging
 import os
 import time
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
 
-from sandboxy.providers.base import BaseProvider, ModelInfo, ModelResponse, ProviderError
+logger = logging.getLogger(__name__)
 
+from sandboxy.providers.base import BaseProvider, ModelInfo, ModelResponse, ProviderError
 
 # Popular models with their metadata (subset - OpenRouter has 400+)
 OPENROUTER_MODELS = {
@@ -249,7 +253,7 @@ class OpenRouterProvider(BaseProvider):
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
             "HTTP-Referer": "https://sandboxy.ai",
-            "X-Title": "Sandboxy Arena",
+            "X-Title": "Sandboxy",
         }
 
     async def complete(
@@ -335,28 +339,26 @@ class OpenRouterProvider(BaseProvider):
             **kwargs,
         }
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            async with client.stream(
-                "POST",
-                f"{self.base_url}/chat/completions",
-                headers=self._get_headers(),
-                json=payload,
-            ) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if line.startswith("data: "):
-                        data = line[6:]
-                        if data == "[DONE]":
-                            break
-                        try:
-                            import json
-                            chunk = json.loads(data)
-                            delta = chunk.get("choices", [{}])[0].get("delta", {})
-                            content = delta.get("content", "")
-                            if content:
-                                yield content
-                        except (json.JSONDecodeError, KeyError):
-                            continue
+        async with httpx.AsyncClient(timeout=120.0) as client, client.stream(
+            "POST",
+            f"{self.base_url}/chat/completions",
+            headers=self._get_headers(),
+            json=payload,
+        ) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if line.startswith("data: "):
+                    data = line[6:]
+                    if data == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                        delta = chunk.get("choices", [{}])[0].get("delta", {})
+                        content = delta.get("content", "")
+                        if content:
+                            yield content
+                    except (json.JSONDecodeError, KeyError):
+                        continue
 
     def list_models(self) -> list[ModelInfo]:
         """List popular models available through OpenRouter."""

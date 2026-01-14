@@ -1,10 +1,13 @@
 """MDL (Module Definition Language) parser - YAML to ModuleSpec."""
 
+import logging
 import re
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 from sandboxy.core.state import (
     EnvConfig,
@@ -201,7 +204,7 @@ def interpolate_template(text: str, variables: dict[str, Any]) -> str:
     # Process conditional blocks with support for else-if chains
     # Match {{#if ...}}...{{/if}} blocks
     if_pattern = re.compile(
-        r'\{\{#if\s+(.+?)\}\}(.*?)\{\{/if\}\}',
+        r"\{\{#if\s+(.+?)\}\}(.*?)\{\{/if\}\}",
         re.DOTALL
     )
 
@@ -211,7 +214,7 @@ def interpolate_template(text: str, variables: dict[str, Any]) -> str:
 
         # Parse the body for else-if and else clauses
         # Split by {{else if ...}} and {{else}}
-        parts = re.split(r'\{\{else if\s+(.+?)\}\}|\{\{else\}\}', body)
+        parts = re.split(r"\{\{else if\s+(.+?)\}\}|\{\{else\}\}", body)
 
         # parts[0] is the content for the first if condition
         # Then alternating: condition (or None for else), content
@@ -256,9 +259,9 @@ def interpolate_template(text: str, variables: dict[str, Any]) -> str:
     # Simple variable substitution: {{variable}}
     def replace_var(match: re.Match) -> str:
         var_name = match.group(1).strip()
-        return str(variables.get(var_name, "{{var_name}}"))
+        return str(variables.get(var_name, f"{{{{{var_name}}}}}"))
 
-    var_pattern = re.compile(r'\{\{(\w+)\}\}')
+    var_pattern = re.compile(r"\{\{(\w+)\}\}")
     text = var_pattern.sub(replace_var, text)
 
     return text
@@ -305,19 +308,18 @@ def _interpolate_value(value: Any, var_dict: dict[str, Any]) -> Any:
     """
     if isinstance(value, str):
         # Check if it's a pure variable reference like "{{var_name}}"
-        pure_var_match = re.match(r'^\{\{(\w+)\}\}$', value.strip())
+        pure_var_match = re.match(r"^\{\{(\w+)\}\}$", value.strip())
         if pure_var_match:
             var_name = pure_var_match.group(1)
             if var_name in var_dict:
                 return var_dict[var_name]
         # Otherwise do string interpolation
         return interpolate_template(value, var_dict)
-    elif isinstance(value, dict):
+    if isinstance(value, dict):
         return {k: _interpolate_value(v, var_dict) for k, v in value.items()}
-    elif isinstance(value, list):
+    if isinstance(value, list):
         return [_interpolate_value(item, var_dict) for item in value]
-    else:
-        return value
+    return value
 
 
 def apply_variables(module: ModuleSpec, variables: dict[str, Any]) -> ModuleSpec:
@@ -430,7 +432,16 @@ def validate_module(path: Path) -> list[str]:
                 errors.append(f"Step '{step.id}' references unknown branch: {branch_name}")
 
     # Validate evaluation checks have valid kinds
-    valid_kinds = {"deterministic", "llm"}
+    valid_kinds = {
+        "contains",
+        "regex",
+        "count",
+        "tool_called",
+        "equals",
+        "env_state",
+        "deterministic",
+        "llm",
+    }
     for check in module.evaluation:
         if check.kind not in valid_kinds:
             errors.append(f"Evaluation '{check.name}' has invalid kind: {check.kind}")

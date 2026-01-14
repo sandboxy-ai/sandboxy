@@ -1,28 +1,16 @@
 """Tool listing routes with config schemas."""
 
+import logging
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from sandboxy.tools.loader import BUILTIN_TOOLS, load_tool_class
 from sandboxy.tools.base import ToolConfig
+from sandboxy.tools.loader import BUILTIN_TOOLS, load_tool_class
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
-
-
-class ToolConfigField(BaseModel):
-    """Schema for a single config field."""
-
-    type: str
-    label: str
-    description: str | None = None
-    default: Any = None
-    min: float | None = None
-    max: float | None = None
-    step: float | None = None
-    options: list[str] | None = None
-    items: dict[str, Any] | None = None  # For array types
 
 
 class ToolAction(BaseModel):
@@ -79,9 +67,9 @@ def _load_tools() -> list[ToolResponse]:
                                 parameters=action.get("parameters", {}),
                             )
                         )
-            except Exception:
-                # If instantiation fails, skip actions
-                pass
+            except Exception as e:
+                # If instantiation fails, skip actions but log the issue
+                logger.debug("Could not instantiate tool %s for action discovery: %s", tool_id, e)
 
             tools.append(
                 ToolResponse(
@@ -92,8 +80,9 @@ def _load_tools() -> list[ToolResponse]:
                     actions=actions,
                 )
             )
-        except Exception:
-            # Skip tools that fail to load
+        except Exception as e:
+            # Skip tools that fail to load but log the error
+            logger.warning("Failed to load tool %s: %s", tool_id, e)
             continue
 
     return tools
@@ -113,7 +102,5 @@ async def get_tool(tool_id: str):
     for tool in tools:
         if tool.id == tool_id:
             return tool
-
-    from fastapi import HTTPException
 
     raise HTTPException(status_code=404, detail=f"Tool not found: {tool_id}")

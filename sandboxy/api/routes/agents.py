@@ -1,18 +1,15 @@
 """Agent listing routes."""
 
-from pathlib import Path
+import logging
 
 import yaml
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-router = APIRouter()
+from sandboxy.local.context import get_local_context
 
-# Paths to agent YAML directories
-AGENT_DIRS = [
-    Path(__file__).parent.parent.parent.parent / "agents" / "core",
-    Path(__file__).parent.parent.parent.parent / "agents" / "community",
-]
+logger = logging.getLogger(__name__)
+router = APIRouter()
 
 
 class AgentResponse(BaseModel):
@@ -33,42 +30,46 @@ class AgentListResponse(BaseModel):
 
 
 def _load_agents() -> list[AgentResponse]:
-    """Load agents from YAML files in the agent directories."""
+    """Load agents from YAML files in the local agents directory."""
+    ctx = get_local_context()
+    if not ctx:
+        return []
+
     agents = []
+    agent_dir = ctx.agents_dir
 
-    for agent_dir in AGENT_DIRS:
-        if not agent_dir.exists():
-            continue
+    if not agent_dir.exists():
+        return agents
 
-        for path in agent_dir.glob("*.y*ml"):
-            try:
-                content = path.read_text()
-                data = yaml.safe_load(content)
-                if data and isinstance(data, dict):
-                    agent_id = data.get("id", path.stem)
-                    model = data.get("model", "unknown")
+    for path in agent_dir.glob("*.y*ml"):
+        try:
+            content = path.read_text()
+            data = yaml.safe_load(content)
+            if data and isinstance(data, dict):
+                agent_id = data.get("id", path.stem)
+                model = data.get("model", "unknown")
 
-                    # Determine provider from model name
-                    provider = None
-                    if "gpt" in model.lower():
-                        provider = "openai"
-                    elif "claude" in model.lower():
-                        provider = "anthropic"
-                    elif "llama" in model.lower() or "mistral" in model.lower():
-                        provider = "local"
+                # Determine provider from model name
+                provider = None
+                if "gpt" in model.lower():
+                    provider = "openai"
+                elif "claude" in model.lower():
+                    provider = "anthropic"
+                elif "llama" in model.lower() or "mistral" in model.lower():
+                    provider = "local"
 
-                    agents.append(
-                        AgentResponse(
-                            id=agent_id,
-                            name=data.get("name", agent_id),
-                            model=model,
-                            description=data.get("description"),
-                            provider=provider,
-                        )
+                agents.append(
+                    AgentResponse(
+                        id=agent_id,
+                        name=data.get("name", agent_id),
+                        model=model,
+                        description=data.get("description"),
+                        provider=provider,
                     )
-            except Exception:
-                # Skip invalid files
-                continue
+                )
+        except Exception as e:
+            logger.warning(f"Failed to load agent from {path}: {e}")
+            continue
 
     return agents
 
@@ -87,7 +88,5 @@ async def get_agent(agent_id: str):
     for agent in agents:
         if agent.id == agent_id:
             return agent
-
-    from fastapi import HTTPException
 
     raise HTTPException(status_code=404, detail="Agent not found")

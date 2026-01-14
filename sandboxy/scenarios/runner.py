@@ -4,16 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from pathlib import Path
-from typing import Any, Protocol, Union
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 from sandboxy.agents.base import Agent, AgentAction
 from sandboxy.scenarios.loader import ScenarioSpec, StepSpec
-from sandboxy.tools.base import Tool, ToolResult
+from sandboxy.tools.base import ToolResult
 from sandboxy.tools.loader import YAML_TOOL_DIRS
-from sandboxy.tools.yaml_tools import YamlMockTool, load_scenario_tools
+from sandboxy.tools.yaml_tools import load_scenario_tools
+
+logger = logging.getLogger(__name__)
 
 
 class ScenarioEvent(BaseModel):
@@ -211,8 +214,8 @@ class ScenarioRunner:
             await self._get_agent_response(max_tool_calls=10)
 
         elif step.action == "await_user":
-            # Interactive mode - for now, skip
-            pass
+            # Interactive mode - skip in batch execution
+            logger.debug("Skipping await_user step (batch mode)")
 
     def _add_user_message(self, content: str) -> None:
         """Add a user message to history."""
@@ -223,7 +226,8 @@ class ScenarioRunner:
 
     async def _get_agent_response(self, max_tool_calls: int = 10) -> None:
         """Get agent response, handling tool calls."""
-        from sandboxy.core.state import Message as CoreMessage, ToolCall
+        from sandboxy.core.state import Message as CoreMessage
+        from sandboxy.core.state import ToolCall
 
         tool_calls_made = 0
 
@@ -267,7 +271,7 @@ class ScenarioRunner:
                 )
                 return
 
-            elif action.type == "tool_call":
+            if action.type == "tool_call":
                 # Agent made a tool call
                 await self._handle_tool_call(action)
                 tool_calls_made += 1
@@ -442,6 +446,8 @@ class ScenarioRunner:
 
     def _compute_score(self, goals_achieved: list[str]) -> float:
         """Compute score based on achieved goals."""
+        from sandboxy.core.safe_eval import EvaluationError, safe_eval_formula
+
         total = 0.0
         goal_map = {g.id: g for g in self.scenario.goals}
 
@@ -450,13 +456,17 @@ class ScenarioRunner:
                 total += goal_map[goal_id].points
 
         # Apply scoring formula if present
-        if self.scenario.scoring.get("formula"):
+        formula = self.scenario.scoring.get("formula")
+        if formula:
+            context = {
+                g.id.replace("-", "_"): 1.0 if g.id in goals_achieved else 0.0
+                for g in self.scenario.goals
+            }
+            context["goals_achieved"] = float(len(goals_achieved))
+            context["total_goals"] = float(len(self.scenario.goals))
             try:
-                context = {g.id.replace("-", "_"): 1 if g.id in goals_achieved else 0 for g in self.scenario.goals}
-                context["goals_achieved"] = len(goals_achieved)
-                context["total_goals"] = len(self.scenario.goals)
-                total = float(eval(self.scenario.scoring["formula"], {"__builtins__": {}}, context))
-            except Exception:
-                pass
+                total = safe_eval_formula(formula, context)
+            except EvaluationError as e:
+                logger.warning("Failed to evaluate scoring formula '%s': %s", formula, e)
 
         return total

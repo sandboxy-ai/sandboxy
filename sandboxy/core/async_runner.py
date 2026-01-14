@@ -6,10 +6,14 @@ can be paused to await user input.
 
 import asyncio
 import json
+import logging
+import re
 from collections.abc import AsyncGenerator
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 from sandboxy.agents.base import Agent, AgentAction
 from sandboxy.core.state import (
@@ -270,7 +274,7 @@ class AsyncRunner:
             elif action.type == "stop":
                 # If we've processed tool calls, the agent should respond based on results
                 # Some models return empty content after tool calls - add a hint and retry once
-                if tool_call_count > 0 and not hasattr(self, '_retry_after_tool'):
+                if tool_call_count > 0 and not hasattr(self, "_retry_after_tool"):
                     self._retry_after_tool = True
                     # Add a system hint to prompt the agent to respond
                     self.history.append(Message(
@@ -280,8 +284,8 @@ class AsyncRunner:
                     continue  # Retry the loop
 
                 # Clean up retry flag
-                if hasattr(self, '_retry_after_tool'):
-                    delattr(self, '_retry_after_tool')
+                if hasattr(self, "_retry_after_tool"):
+                    delattr(self, "_retry_after_tool")
 
                 yield RunEvent(
                     type="agent_stop",
@@ -466,7 +470,7 @@ class AsyncRunner:
         # Extract numeric values from checks for use in formulas
         check_values: dict[str, float] = {}
         for name, result in checks.items():
-            if isinstance(result, (int, float)):
+            if isinstance(result, int | float):
                 check_values[name] = float(result)
             elif isinstance(result, bool):
                 check_values[name] = 1.0 if result else 0.0
@@ -475,7 +479,7 @@ class AsyncRunner:
                     check_values[name] = 1.0
                 elif result.get("passed") is False:
                     check_values[name] = 0.0
-                elif "value" in result and isinstance(result["value"], (int, float)):
+                elif "value" in result and isinstance(result["value"], int | float):
                     check_values[name] = float(result["value"])
 
         # Mode 1: Custom formula
@@ -539,23 +543,22 @@ class AsyncRunner:
         try:
             if kind == "contains":
                 return self._check_contains(check)
-            elif kind == "regex":
+            if kind == "regex":
                 return self._check_regex(check)
-            elif kind == "count":
+            if kind == "count":
                 return self._check_count(check)
-            elif kind == "tool_called":
+            if kind == "tool_called":
                 return self._check_tool_called(check)
-            elif kind == "equals":
+            if kind == "equals":
                 return self._check_equals(check)
-            elif kind == "env_state":
+            if kind == "env_state":
                 return self._check_env_state(check)
-            elif kind == "deterministic":
+            if kind == "deterministic":
                 # Legacy support for raw Python expressions
                 return self._check_deterministic(check)
-            elif kind == "llm":
+            if kind == "llm":
                 return {"status": "skipped", "reason": "LLM eval not implemented"}
-            else:
-                return {"status": "error", "error": f"Unknown check kind: {kind}"}
+            return {"status": "error", "error": f"Unknown check kind: {kind}"}
         except Exception as e:
             return {"status": "error", "error": str(e)}
 
@@ -565,39 +568,37 @@ class AsyncRunner:
             return " ".join(
                 msg.content for msg in self.history if msg.role == "assistant"
             )
-        elif target == "user_messages":
+        if target == "user_messages":
             return " ".join(
                 msg.content for msg in self.history if msg.role == "user"
             )
-        elif target == "all_messages":
+        if target == "all_messages":
             return " ".join(msg.content for msg in self.history)
-        elif target == "last_agent_message":
+        if target == "last_agent_message":
             for msg in reversed(self.history):
                 if msg.role == "assistant":
                     return msg.content
             return ""
-        elif target == "last_user_message":
+        if target == "last_user_message":
             for msg in reversed(self.history):
                 if msg.role == "user":
                     return msg.content
             return ""
-        else:
-            return ""
+        return ""
 
     def _get_target_list(self, target: str) -> list[Any]:
         """Get list of items for a target."""
         if target == "agent_messages":
             return [msg for msg in self.history if msg.role == "assistant"]
-        elif target == "user_messages":
+        if target == "user_messages":
             return [msg for msg in self.history if msg.role == "user"]
-        elif target == "all_messages":
+        if target == "all_messages":
             return list(self.history)
-        elif target == "tool_calls":
+        if target == "tool_calls":
             return [
                 event for event in self.events if event.type == "tool_call"
             ]
-        else:
-            return []
+        return []
 
     def _check_contains(self, check: Any) -> dict[str, Any]:
         """Check if target contains a value."""
@@ -625,8 +626,6 @@ class AsyncRunner:
 
     def _check_regex(self, check: Any) -> dict[str, Any]:
         """Check if target matches a regex pattern."""
-        import re
-
         target = check.target or "agent_messages"
         pattern = check.pattern or ""
         expected = check.expected
@@ -765,21 +764,18 @@ class AsyncRunner:
 
             # Check for pass_if condition (e.g., ">=0", "<=5", ">=50")
             pass_if = check.config.get("pass_if")
-            if pass_if and isinstance(result, (int, float)):
+            if pass_if and isinstance(result, int | float):
                 passed = self._evaluate_pass_condition(result, pass_if)
                 return {"passed": passed, "value": result, "condition": pass_if}
-            elif isinstance(result, bool):
+            if isinstance(result, bool):
                 return {"passed": result}
-            else:
-                # For numeric values without pass_if, just return the value (no pass/fail)
-                return {"value": result}
+            # For numeric values without pass_if, just return the value (no pass/fail)
+            return {"value": result}
         except Exception as e:
             return {"status": "error", "error": str(e)}
 
     def _evaluate_pass_condition(self, value: float, condition: str) -> bool:
         """Evaluate a pass_if condition like '>=0', '<=5', '>50'."""
-        import re
-
         # Parse condition: operator + value (e.g., ">=50", "<=0", ">10")
         match = re.match(r"([<>=!]+)\s*(-?[\d.]+)", condition)
         if not match:
@@ -790,18 +786,17 @@ class AsyncRunner:
 
         if op == ">=":
             return value >= threshold
-        elif op == "<=":
+        if op == "<=":
             return value <= threshold
-        elif op == ">":
+        if op == ">":
             return value > threshold
-        elif op == "<":
+        if op == "<":
             return value < threshold
-        elif op == "==" or op == "=":
+        if op == "==" or op == "=":
             return value == threshold
-        elif op == "!=" or op == "<>":
+        if op == "!=" or op == "<>":
             return value != threshold
-        else:
-            return True  # Unknown operator, default to pass
+        return True  # Unknown operator, default to pass
 
     def _safe_eval(self, expr: str, context: dict[str, Any]) -> Any:
         """Safely evaluate an expression with restricted scope (legacy support)."""

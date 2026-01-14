@@ -191,7 +191,7 @@ async def get_local_scenario(scenario_id: str) -> ScenarioDetail:
                 raise HTTPException(
                     status_code=500,
                     detail=f"Error loading scenario: {e}",
-                )
+                ) from e
 
             # Extract variables
             variables = _extract_variables(content or {})
@@ -246,7 +246,7 @@ async def get_local_tool(tool_id: str) -> dict[str, Any]:
                 raise HTTPException(
                     status_code=500,
                     detail=f"Error loading tool: {e}",
-                )
+                ) from e
 
             return {
                 "id": t["id"],
@@ -296,7 +296,7 @@ async def get_local_agent(agent_id: str) -> dict[str, Any]:
                 raise HTTPException(
                     status_code=500,
                     detail=f"Error loading agent: {e}",
-                )
+                ) from e
 
             return {
                 "id": a["id"],
@@ -360,7 +360,7 @@ async def get_local_run(filename: str) -> dict[str, Any]:
     try:
         return json.loads(filepath.read_text())
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error loading run: {e}")
+        raise HTTPException(status_code=500, detail=f"Error loading run: {e}") from e
 
 
 # =============================================================================
@@ -484,7 +484,7 @@ async def run_scenario(request: RunScenarioRequest) -> RunScenarioResponse:
 
     except Exception as e:
         logger.exception(f"Error running scenario: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/local/compare", response_model=CompareModelsResponse)
@@ -557,7 +557,7 @@ async def compare_models(request: CompareModelsRequest) -> CompareModelsResponse
 
     except Exception as e:
         logger.exception(f"Error comparing models: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 def get_model_pricing(model_id: str) -> dict[str, float] | None:
@@ -662,7 +662,7 @@ async def save_scenario(request: SaveScenarioRequest) -> SaveScenarioResponse:
     try:
         yaml.safe_load(request.content)
     except yaml.YAMLError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid YAML: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid YAML: {e}") from e
 
     # Ensure scenarios directory exists
     ctx.scenarios_dir.mkdir(parents=True, exist_ok=True)
@@ -707,7 +707,7 @@ async def update_scenario(
     try:
         yaml.safe_load(request.content)
     except yaml.YAMLError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid YAML: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid YAML: {e}") from e
 
     # Update file
     filepath.write_text(request.content)
@@ -810,7 +810,7 @@ async def save_tool(request: SaveToolRequest) -> SaveToolResponse:
         try:
             yaml.safe_load(request.content)
         except yaml.YAMLError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid YAML: {e}")
+            raise HTTPException(status_code=400, detail=f"Invalid YAML: {e}") from e
         filepath = ctx.tools_dir / f"{request.name}.yml"
         filepath.write_text(request.content)
     else:
@@ -818,7 +818,7 @@ async def save_tool(request: SaveToolRequest) -> SaveToolResponse:
         try:
             yaml.safe_load(request.content)
         except yaml.YAMLError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid YAML: {e}")
+            raise HTTPException(status_code=400, detail=f"Invalid YAML: {e}") from e
         filepath = ctx.tools_dir / f"{request.name}.yml"
         filepath.write_text(request.content)
 
@@ -991,7 +991,7 @@ async def get_local_dataset(dataset_id: str) -> DatasetDetail:
     try:
         content = yaml.safe_load(filepath.read_text())
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error loading dataset: {e}")
+        raise HTTPException(status_code=500, detail=f"Error loading dataset: {e}") from e
 
     cases = []
     for case_data in content.get("cases", []):
@@ -1067,7 +1067,7 @@ async def get_scenario_goals(scenario_id: str) -> list[ScenarioGoalInfo]:
         return goals
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error loading scenario: {e}")
+        raise HTTPException(status_code=500, detail=f"Error loading scenario: {e}") from e
 
 
 class ScenarioToolAction(BaseModel):
@@ -1161,7 +1161,7 @@ async def get_scenario_tools(scenario_id: str) -> list[ScenarioToolInfo]:
         return tools_info
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error loading scenario tools: {e}")
+        raise HTTPException(status_code=500, detail=f"Error loading scenario tools: {e}") from e
 
 
 @router.post("/local/datasets", response_model=SaveDatasetResponse)
@@ -1194,7 +1194,7 @@ async def save_dataset(request: SaveDatasetRequest) -> SaveDatasetResponse:
     try:
         yaml.safe_load(request.content)
     except yaml.YAMLError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid YAML: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid YAML: {e}") from e
 
     # Ensure datasets directory exists
     datasets_dir = ctx.datasets_dir
@@ -1240,7 +1240,7 @@ async def update_dataset(
     try:
         yaml.safe_load(request.content)
     except yaml.YAMLError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid YAML: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid YAML: {e}") from e
 
     # Update file
     filepath.write_text(request.content)
@@ -1370,4 +1370,4 @@ async def run_with_dataset(request: RunDatasetRequest) -> RunDatasetResponse:
 
     except Exception as e:
         logger.exception(f"Error running dataset: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e

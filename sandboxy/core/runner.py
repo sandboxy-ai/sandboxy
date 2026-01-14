@@ -1,9 +1,13 @@
 """Runner - executes MDL modules with agents and tools."""
 
 import json
+import logging
+import re
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 from sandboxy.agents.base import Agent, AgentAction
 from sandboxy.core.state import EvaluationResult, Message, ModuleSpec, Step, ToolCall
@@ -169,7 +173,7 @@ class Runner:
                 )
                 return False  # Done with this await_agent step
 
-            elif action.type == "tool_call":
+            if action.type == "tool_call":
                 self._handle_tool_call(action, step)
                 tool_call_count += 1
                 # Continue loop to let agent respond to tool result
@@ -306,12 +310,8 @@ class Runner:
         checks: dict[str, Any] = {}
 
         for check in self.module.evaluation:
-            if check.kind == "deterministic":
-                result = self._eval_deterministic(check)
-                checks[check.name] = result
-            elif check.kind == "llm":
-                # LLM evaluation not implemented in MVP
-                checks[check.name] = {"status": "skipped", "reason": "LLM eval not implemented"}
+            result = self._run_check(check)
+            checks[check.name] = result
 
         # Compute score using scoring config
         score = self._compute_score(checks)
@@ -323,6 +323,159 @@ class Runner:
             status="ok",
         )
 
+    def _run_check(self, check: Any) -> dict[str, Any]:
+        """Run a single evaluation check."""
+        kind = check.kind
+
+        try:
+            if kind == "contains":
+                return self._check_contains(check)
+            if kind == "regex":
+                return self._check_regex(check)
+            if kind == "count":
+                return self._check_count(check)
+            if kind == "tool_called":
+                return self._check_tool_called(check)
+            if kind == "env_state":
+                return self._check_env_state(check)
+            if kind == "deterministic":
+                return self._eval_deterministic(check)
+            if kind == "llm":
+                return {"status": "skipped", "reason": "LLM eval not implemented"}
+            return {"status": "error", "error": f"Unknown check kind: {kind}"}
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+
+    def _get_target_text(self, target: str) -> str:
+        """Get text content for a target."""
+        if target == "agent_messages":
+            return " ".join(
+                msg.content for msg in self.history if msg.role == "assistant"
+            )
+        if target == "user_messages":
+            return " ".join(
+                msg.content for msg in self.history if msg.role == "user"
+            )
+        if target == "all_messages":
+            return " ".join(msg.content for msg in self.history)
+        if target == "last_agent_message":
+            for msg in reversed(self.history):
+                if msg.role == "assistant":
+                    return msg.content
+            return ""
+        return ""
+
+    def _get_target_list(self, target: str) -> list[Any]:
+        """Get list of items for a target."""
+        if target == "agent_messages":
+            return [msg for msg in self.history if msg.role == "assistant"]
+        if target == "user_messages":
+            return [msg for msg in self.history if msg.role == "user"]
+        if target == "all_messages":
+            return list(self.history)
+        if target == "tool_calls":
+            return [event for event in self.events if event.type == "tool_call"]
+        return []
+
+    def _check_contains(self, check: Any) -> dict[str, Any]:
+        """Check if target contains a value."""
+        target = check.target or "agent_messages"
+        value = check.value or ""
+        expected = check.expected
+        case_sensitive = check.case_sensitive
+
+        text = self._get_target_text(target)
+
+        if not case_sensitive:
+            text = text.lower()
+            value = value.lower()
+
+        found = value in text
+        passed = found == expected
+
+        return {
+            "passed": passed,
+            "found": found,
+            "expected": expected,
+        }
+
+    def _check_regex(self, check: Any) -> dict[str, Any]:
+        """Check if target matches a regex pattern."""
+        target = check.target or "agent_messages"
+        pattern = check.pattern or ""
+        expected = check.expected
+
+        text = self._get_target_text(target)
+        flags = 0 if check.case_sensitive else re.IGNORECASE
+        match = bool(re.search(pattern, text, flags))
+        passed = match == expected
+
+        return {
+            "passed": passed,
+            "matched": match,
+            "expected": expected,
+        }
+
+    def _check_count(self, check: Any) -> dict[str, Any]:
+        """Check count of items."""
+        target = check.target or "agent_messages"
+        min_count = check.min
+        max_count = check.max
+
+        items = self._get_target_list(target)
+        count = len(items)
+
+        passed = True
+        if min_count is not None and count < min_count:
+            passed = False
+        if max_count is not None and count > max_count:
+            passed = False
+
+        return {
+            "passed": passed,
+            "count": count,
+            "min": min_count,
+            "max": max_count,
+        }
+
+    def _check_tool_called(self, check: Any) -> dict[str, Any]:
+        """Check if a specific tool was called."""
+        tool_name = check.tool
+        action_name = check.action
+        expected = check.expected
+
+        tool_calls = [e for e in self.events if e.type == "tool_call"]
+
+        called = False
+        for tc in tool_calls:
+            payload = tc.payload
+            if payload.get("tool") == tool_name:
+                if action_name is None or payload.get("action") == action_name:
+                    called = True
+                    break
+
+        passed = called == expected
+
+        return {
+            "passed": passed,
+            "called": called,
+            "expected": expected,
+        }
+
+    def _check_env_state(self, check: Any) -> dict[str, Any]:
+        """Check environment state value."""
+        key = check.key or ""
+        expected_value = check.value
+
+        actual_value = self.env_state.get(key)
+        passed = actual_value == expected_value
+
+        return {
+            "passed": passed,
+            "actual": actual_value,
+            "expected": expected_value,
+        }
+
     def _compute_score(self, checks: dict[str, Any]) -> float:
         """Compute final score based on scoring config."""
         scoring = self.module.scoring
@@ -330,7 +483,7 @@ class Runner:
         # Extract numeric values from checks
         check_values: dict[str, float] = {}
         for name, result in checks.items():
-            if isinstance(result, (int, float)):
+            if isinstance(result, int | float):
                 check_values[name] = float(result)
             elif isinstance(result, bool):
                 check_values[name] = 1.0 if result else 0.0
@@ -339,7 +492,7 @@ class Runner:
                     check_values[name] = 1.0
                 elif result.get("passed") is False:
                     check_values[name] = 0.0
-                elif "value" in result and isinstance(result["value"], (int, float)):
+                elif "value" in result and isinstance(result["value"], int | float):
                     check_values[name] = float(result["value"])
 
         # Use formula if specified

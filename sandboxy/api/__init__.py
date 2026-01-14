@@ -1,5 +1,5 @@
 """FastAPI application for Sandboxy."""
 
-from sandboxy.api.app import app, run_server
+from sandboxy.api.app import create_local_app
 
-__all__ = ["app", "run_server"]
+__all__ = ["create_local_app"]

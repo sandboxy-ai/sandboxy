@@ -1,100 +1,78 @@
-"""FastAPI application factory and server runner."""
+"""FastAPI application factory for local development."""
 
-import os
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+from sandboxy.logging import setup_logging
+
+load_dotenv()
+setup_logging()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from sandboxy.api.rate_limit import RateLimitMiddleware
-from sandboxy.db.database import init_db
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Application lifespan handler for startup/shutdown."""
-    # Startup: Initialize database
-    await init_db()
+async def _local_lifespan(app: FastAPI):
+    """Lifespan handler for local mode (no database)."""
     yield
-    # Shutdown: cleanup if needed
 
 
-def create_app() -> FastAPI:
-    """Create and configure the FastAPI application."""
+def create_local_app(
+    root_dir: Path,
+    local_ui_path: Path | None = None,
+) -> FastAPI:
+    """Create FastAPI app for local development mode.
+
+    This version is lightweight and reads from the local filesystem.
+
+    Args:
+        root_dir: Working directory for scenarios/tools/agents.
+        local_ui_path: Path to local UI static files.
+    """
+    from sandboxy.local.context import LocalContext, set_local_context
+
+    ctx = LocalContext(root_dir=root_dir)
+    set_local_context(ctx)
+
     app = FastAPI(
-        title="Sandboxy",
-        description="Interactive agent simulation and benchmarking platform",
+        title="Sandboxy Local",
+        description="Local development server for Sandboxy",
         version="0.2.0",
-        lifespan=lifespan,
+        lifespan=_local_lifespan,
     )
 
-    # CORS middleware for frontend
+    # CORS - allow all origins in local mode
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:3000",
-            "http://localhost:5173",  # Vite dev server
-            "http://127.0.0.1:3000",
-            "http://127.0.0.1:5173",
-        ],
+        allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
-    # Rate limiting middleware (can be disabled via env var)
-    if os.environ.get("SANDBOXY_DISABLE_RATE_LIMIT", "").lower() != "true":
-        app.add_middleware(RateLimitMiddleware)
+    # Local routes only
+    from sandboxy.api.routes import agents, tools
+    from sandboxy.api.routes import local as local_routes
 
-    # Register routes
-    from sandboxy.api.routes import agents, modules, sessions
-
-    app.include_router(modules.router, prefix="/api/v1", tags=["modules"])
+    app.include_router(local_routes.router, prefix="/api/v1", tags=["local"])
     app.include_router(agents.router, prefix="/api/v1", tags=["agents"])
-    app.include_router(sessions.router, prefix="/api/v1", tags=["sessions"])
+    app.include_router(tools.router, prefix="/api/v1", tags=["tools"])
 
-    # Register WebSocket handler
-    from sandboxy.api.websocket import router as ws_router
-
-    app.include_router(ws_router)
-
-    # Health check
     @app.get("/health")
     async def health_check():
-        return {"status": "ok", "version": "0.2.0"}
+        return {"status": "ok", "mode": "local"}
 
-    # Serve frontend static files in production
-    frontend_path = Path(__file__).parent.parent.parent / "frontend" / "dist"
-    if frontend_path.exists():
-        app.mount("/", StaticFiles(directory=str(frontend_path), html=True), name="frontend")
+    # Serve local UI if available
+    if local_ui_path and local_ui_path.exists():
+        app.mount(
+            "/", StaticFiles(directory=str(local_ui_path), html=True), name="local-ui"
+        )
 
     return app
-
-
-# Create the app instance
-app = create_app()
-
-
-def run_server():
-    """Run the server using uvicorn (entry point for sandboxy-server command)."""
-    import uvicorn
-
-    host = os.environ.get("SANDBOXY_HOST", "0.0.0.0")
-    port = int(os.environ.get("SANDBOXY_PORT", "8000"))
-    reload = os.environ.get("SANDBOXY_RELOAD", "").lower() == "true"
-
-    print(f"Starting Sandboxy server at http://{host}:{port}")
-    print("Press Ctrl+C to stop")
-
-    uvicorn.run(
-        "sandboxy.api.app:app",
-        host=host,
-        port=port,
-        reload=reload,
-    )
-
-
-if __name__ == "__main__":
-    run_server()

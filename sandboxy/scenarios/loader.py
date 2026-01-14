@@ -201,12 +201,11 @@ def _interpolate_value(value: Any, variables: dict[str, Any]) -> Any:
     """Recursively interpolate variables in a value."""
     if isinstance(value, str):
         return _interpolate_string(value, variables)
-    elif isinstance(value, dict):
+    if isinstance(value, dict):
         return {k: _interpolate_value(v, variables) for k, v in value.items()}
-    elif isinstance(value, list):
+    if isinstance(value, list):
         return [_interpolate_value(item, variables) for item in value]
-    else:
-        return value
+    return value
 
 
 def apply_scenario_variables(spec: ScenarioSpec, variables: dict[str, Any]) -> ScenarioSpec:

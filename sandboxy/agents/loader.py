@@ -1,5 +1,6 @@
 """Agent loader - loads agent configurations and instantiates agents."""
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -8,12 +9,31 @@ import yaml
 from sandboxy.agents.base import Agent, AgentConfig
 from sandboxy.agents.llm_prompt import LlmPromptAgent
 
-# Default directories to search for agent specs
+logger = logging.getLogger(__name__)
+
+# Default directories to search for agent specs (user's directories only)
 DEFAULT_AGENT_DIRS = [
-    Path("agents/core"),
-    Path("agents/community"),
     Path.home() / ".sandboxy" / "agents",
 ]
+
+
+def get_agent_dirs() -> list[Path]:
+    """Get agent directories, including local if in local mode.
+
+    Returns:
+        List of directories to search for agents.
+    """
+    from sandboxy.local.context import get_local_context, is_local_mode
+
+    dirs: list[Path] = []
+
+    if is_local_mode():
+        ctx = get_local_context()
+        if ctx and ctx.agents_dir.exists():
+            dirs.append(ctx.agents_dir)
+
+    dirs.extend(DEFAULT_AGENT_DIRS)
+    return dirs
 
 
 class AgentLoader:
@@ -45,6 +65,7 @@ class AgentLoader:
         try:
             raw: dict[str, Any] = yaml.safe_load(path.read_text())
             if not raw or "id" not in raw:
+                logger.debug("Skipping %s: missing 'id' field", path)
                 return
 
             config = AgentConfig(
@@ -58,9 +79,11 @@ class AgentLoader:
                 impl=raw.get("impl", {}),
             )
             self._configs[config.id] = config
-        except (yaml.YAMLError, KeyError):
-            # Skip invalid files
-            pass
+            logger.debug("Loaded agent config: %s from %s", config.id, path)
+        except yaml.YAMLError as e:
+            logger.warning("Failed to parse YAML file %s: %s", path, e)
+        except KeyError as e:
+            logger.warning("Missing required field in %s: %s", path, e)
 
     def list_ids(self) -> list[str]:
         """Get list of available agent IDs.
@@ -85,7 +108,9 @@ class AgentLoader:
         """Load and instantiate an agent by ID.
 
         Args:
-            agent_id: Agent identifier.
+            agent_id: Agent identifier. Can be either:
+                - A predefined agent ID from user's YAML files
+                - A model ID (e.g., "openai/gpt-4o", "anthropic/claude-3.5-haiku")
 
         Returns:
             Instantiated agent.
@@ -95,7 +120,22 @@ class AgentLoader:
         """
         config = self._configs.get(agent_id)
         if config is None:
-            raise ValueError(f"Agent not found: {agent_id}")
+            # Check if it's a model ID (contains a /)
+            if "/" in agent_id:
+                # Create a dynamic agent config for this model
+                config = AgentConfig(
+                    id=agent_id,
+                    name=agent_id.split("/")[-1].replace("-", " ").title(),
+                    kind="llm-prompt",
+                    model=agent_id,
+                    system_prompt="You are a helpful assistant. Use the available tools to complete tasks.",
+                    tools=[],
+                    params={"temperature": 0.7, "max_tokens": 2048},
+                    impl={},
+                )
+            else:
+                msg = f"Agent not found: {agent_id}"
+                raise ValueError(msg)
         return self._instantiate(config)
 
     def load_default(self) -> Agent:
@@ -105,22 +145,16 @@ class AgentLoader:
             Default agent instance.
 
         Raises:
-            ValueError: If no agents are available.
+            ValueError: If no agents are available and no model specified.
         """
-        # Prefer gpt35-cheap for cost efficiency
-        if "sandboxy/core/gpt35-cheap" in self._configs:
-            return self._instantiate(self._configs["sandboxy/core/gpt35-cheap"])
-
-        # Then try gpt4-support
-        if "sandboxy/core/gpt4-support" in self._configs:
-            return self._instantiate(self._configs["sandboxy/core/gpt4-support"])
-
-        # Fall back to any available agent
+        # Use any available agent from user's config
         if self._configs:
             config = next(iter(self._configs.values()))
             return self._instantiate(config)
 
-        raise ValueError("No agents available")
+        raise ValueError(
+            "No agents available. Specify a model with -m (e.g., -m openai/gpt-4o)"
+        )
 
     def _instantiate(self, config: AgentConfig) -> Agent:
         """Create agent instance from configuration.
@@ -134,11 +168,25 @@ class AgentLoader:
         Raises:
             ValueError: If agent kind is not supported.
         """
-        if config.kind == "llm-prompt":
-            return LlmPromptAgent(config)
+        return _instantiate_agent(config)
 
-        # Placeholder for other kinds
-        raise ValueError(f"Unsupported agent kind: {config.kind}")
+
+def _instantiate_agent(config: AgentConfig) -> Agent:
+    """Create agent instance from configuration.
+
+    Args:
+        config: Agent configuration.
+
+    Returns:
+        Agent instance.
+
+    Raises:
+        ValueError: If agent kind is not supported.
+    """
+    if config.kind == "llm-prompt":
+        return LlmPromptAgent(config)
+    msg = f"Unsupported agent kind: {config.kind}"
+    raise ValueError(msg)
 
 
 def create_agent_from_config(config: AgentConfig) -> Agent:
@@ -150,5 +198,27 @@ def create_agent_from_config(config: AgentConfig) -> Agent:
     Returns:
         Agent instance.
     """
-    loader = AgentLoader(dirs=[])
-    return loader._instantiate(config)
+    return _instantiate_agent(config)
+
+
+def create_agent_from_model(model_id: str, system_prompt: str = "") -> Agent:
+    """Create an agent directly from a model ID.
+
+    Args:
+        model_id: Model identifier (e.g., "openai/gpt-4o", "anthropic/claude-3.5-sonnet")
+        system_prompt: Optional system prompt override.
+
+    Returns:
+        Agent instance configured for the model.
+    """
+    config = AgentConfig(
+        id=model_id,
+        name=model_id.split("/")[-1].replace("-", " ").title() if "/" in model_id else model_id,
+        kind="llm-prompt",
+        model=model_id,
+        system_prompt=system_prompt or "You are a helpful assistant.",
+        tools=[],
+        params={"temperature": 0.7, "max_tokens": 4096},
+        impl={},
+    )
+    return _instantiate_agent(config)
