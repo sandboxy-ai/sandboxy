@@ -185,8 +185,11 @@ class ToolLibrary(BaseModel):
 # -----------------------------------------------------------------------------
 
 
-def _interpolate(template: str, params: dict[str, Any], state: dict[str, Any]) -> str:
-    """Interpolate {param} and {state.key} placeholders in a template string."""
+def _interpolate(template: Any, params: dict[str, Any], state: dict[str, Any]) -> Any:
+    """Interpolate {param} and {state.key} placeholders in a template string.
+
+    Non-string values are returned unchanged.
+    """
     if not isinstance(template, str):
         return template
 
@@ -656,6 +659,7 @@ class YamlToolLoader:
 def load_scenario_tools(
     scenario_data: dict[str, Any],
     tool_dirs: list[Path] | None = None,
+    tool_overrides: dict[str, Any] | None = None,
 ) -> dict[str, YamlMockTool]:
     """Load all tools for a scenario from YAML data.
 
@@ -665,6 +669,8 @@ def load_scenario_tools(
     Args:
         scenario_data: Parsed scenario YAML
         tool_dirs: Optional tool search directories
+        tool_overrides: Optional dict mapping "tool.action" to override response data.
+                       Used by dataset benchmarking to inject test case data.
 
     Returns:
         Dictionary of tool name to YamlMockTool
@@ -692,4 +698,11 @@ def load_scenario_tools(
         inline_specs = loader.parse_inline_tools(inline_tools)
         all_specs.update(inline_specs)
 
-    return loader.create_tool_instances(all_specs)
+    tools = loader.create_tool_instances(all_specs)
+
+    # Apply tool overrides if provided (for dataset benchmarking)
+    if tool_overrides:
+        for tool in tools.values():
+            tool.set_overrides(tool_overrides)
+
+    return tools

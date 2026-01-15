@@ -276,6 +276,52 @@ def bench(
 
 
 @main.command()
+@click.option("--port", "-p", type=int, default=8000, help="Port to run server on")
+@click.option("--host", default="127.0.0.1", help="Host to bind to")
+@click.option("--no-browser", is_flag=True, help="Don't open browser automatically")
+def open(port: int, host: str, no_browser: bool) -> None:
+    """Open the local Sandboxy UI.
+
+    Starts the API server and opens the web interface in your browser.
+    Loads scenarios, tools, and agents from the current working directory.
+
+    Examples:
+        sandboxy open
+        sandboxy open --port 3000
+        sandboxy open --no-browser
+    """
+    import threading
+    import time
+    import webbrowser
+
+    import uvicorn
+
+    from sandboxy.api.app import create_local_app
+
+    root_dir = Path.cwd()
+    local_ui_path = Path(__file__).parent.parent / "ui" / "dist"
+
+    app = create_local_app(
+        root_dir,
+        local_ui_path if local_ui_path.exists() else None,
+    )
+
+    url = f"http://{host}:{port}"
+    click.echo(f"Starting Sandboxy at {url}")
+    click.echo(f"Working directory: {root_dir}")
+    click.echo("")
+
+    if not no_browser:
+        def open_browser() -> None:
+            time.sleep(1.5)
+            webbrowser.open(url)
+
+        threading.Thread(target=open_browser, daemon=True).start()
+
+    uvicorn.run(app, host=host, port=port, log_level="info")
+
+
+@main.command()
 def list_agents() -> None:
     """List available agents."""
     loader = AgentLoader(DEFAULT_AGENT_DIRS)
@@ -468,24 +514,42 @@ def list_tools() -> None:
     click.echo("    - <library_name>")
 
 
-# Common models for quick reference
+# Common models for quick reference (Updated January 2026)
 POPULAR_MODELS = [
     # Free models
-    ("google/gemini-2.0-flash-exp:free", "Free", "Google's latest flash model"),
+    ("google/gemini-2.0-flash-exp:free", "Free", "Gemini 2.0 Flash - fast & free"),
+    ("deepseek/deepseek-r1:free", "Free", "DeepSeek R1 - reasoning model"),
     ("meta-llama/llama-3.3-70b-instruct:free", "Free", "Llama 3.3 70B"),
     ("qwen/qwen-2.5-72b-instruct:free", "Free", "Qwen 2.5 72B"),
-    # Budget models
-    ("openai/gpt-4o-mini", "$0.15/M", "GPT-4o Mini - fast & cheap"),
-    ("anthropic/claude-3.5-haiku", "$0.80/M", "Claude 3.5 Haiku - fast"),
-    ("google/gemini-flash-1.5", "$0.075/M", "Gemini Flash 1.5"),
-    # Premium models
-    ("openai/gpt-4o", "$2.50/M", "GPT-4o - balanced"),
-    ("anthropic/claude-3.5-sonnet", "$3.00/M", "Claude 3.5 Sonnet - best coding"),
-    ("openai/o1-mini", "$3.00/M", "O1 Mini - reasoning"),
-    ("google/gemini-pro-1.5", "$1.25/M", "Gemini Pro 1.5"),
-    # Frontier models
-    ("anthropic/claude-3-opus", "$15.00/M", "Claude 3 Opus - most capable"),
-    ("openai/o1", "$15.00/M", "O1 - advanced reasoning"),
+    # Budget models (< $0.50/M input)
+    ("openai/gpt-4o-mini", "$0.15/M", "GPT-4o Mini"),
+    ("openai/gpt-4.1-nano", "$0.10/M", "GPT-4.1 Nano"),
+    ("openai/gpt-5-mini", "$0.30/M", "GPT-5 Mini - newest budget"),
+    ("google/gemini-2.0-flash", "$0.10/M", "Gemini 2.0 Flash"),
+    ("google/gemini-3-flash", "$0.30/M", "Gemini 3 Flash - newest"),
+    ("x-ai/grok-4-fast", "$0.20/M", "Grok 4 Fast - 2M context"),
+    ("deepseek/deepseek-chat", "$0.30/M", "DeepSeek V3"),
+    ("anthropic/claude-3-haiku", "$0.25/M", "Claude 3 Haiku"),
+    # Mid-tier models ($0.50 - $2.00/M input)
+    ("anthropic/claude-haiku-4.5", "$1.00/M", "Claude Haiku 4.5 - newest fast"),
+    ("openai/o3-mini", "$1.10/M", "o3 Mini - reasoning"),
+    ("google/gemini-2.5-pro", "$1.25/M", "Gemini 2.5 Pro"),
+    ("openai/gpt-5.1", "$1.25/M", "GPT-5.1"),
+    ("openai/gpt-5.2", "$1.75/M", "GPT-5.2 - newest"),
+    ("deepseek/deepseek-r1", "$0.70/M", "DeepSeek R1 - reasoning"),
+    # Premium models ($2.00 - $5.00/M input)
+    ("google/gemini-3-pro", "$2.00/M", "Gemini 3 Pro - newest"),
+    ("openai/gpt-4.1", "$2.00/M", "GPT-4.1 - 1M context"),
+    ("anthropic/claude-sonnet-4.5", "$3.00/M", "Claude Sonnet 4.5 - newest"),
+    ("anthropic/claude-3.5-sonnet", "$3.00/M", "Claude 3.5 Sonnet"),
+    ("x-ai/grok-4", "$3.00/M", "Grok 4 - 2M context"),
+    ("openai/o1-mini", "$3.00/M", "o1 Mini - reasoning"),
+    ("anthropic/claude-opus-4.5", "$5.00/M", "Claude Opus 4.5 - newest best"),
+    # Frontier models (> $5.00/M input)
+    ("openai/o1", "$15.00/M", "o1 - advanced reasoning"),
+    ("openai/o3", "$20.00/M", "o3 - newest reasoning"),
+    ("openai/gpt-5.2-pro", "$21.00/M", "GPT-5.2 Pro - maximum capability"),
+    ("openai/o1-pro", "$150.00/M", "o1 Pro - extended thinking"),
 ]
 
 

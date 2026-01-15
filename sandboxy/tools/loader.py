@@ -32,6 +32,25 @@ YAML_TOOL_DIRS = [
     Path("sandboxy/tools/libraries"),
 ]
 
+def get_tool_dirs() -> list[Path]:
+    """Get tool directories, including local context if available.
+
+    Returns:
+        List of directories to search for YAML tool libraries.
+    """
+    from sandboxy.local.context import get_local_context, is_local_mode
+
+    dirs: list[Path] = []
+
+    if is_local_mode():
+        ctx = get_local_context()
+        if ctx and ctx.tools_dir.exists():
+            dirs.append(ctx.tools_dir)
+
+    dirs.extend(YAML_TOOL_DIRS)
+    return dirs
+
+
 # Built-in tool mappings (type -> module:class)
 BUILTIN_TOOLS: dict[str, str] = {
     "mock_lemonade": "sandboxy.tools.mock_lemonade:MockLemonadeTool",

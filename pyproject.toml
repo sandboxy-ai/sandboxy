@@ -64,6 +64,7 @@ Repository = "https://github.com/sandboxy-ai/sandboxy"
 
 [tool.hatch.build.targets.wheel]
 packages = ["sandboxy"]
+artifacts = ["sandboxy/ui/dist/**"]
 
 [tool.ruff]
 target-version = "py312"
