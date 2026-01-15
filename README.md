@@ -3,7 +3,9 @@
 Open-source framework for developing, testing, and benchmarking AI agents in simulated environments.
 
 ## What is Sandboxy?
-image.png
+<img width="1560" height="436" alt="image" src="https://github.com/user-attachments/assets/428fda5f-3078-406c-a99e-59b605d10c12" />
+
+
 Sandboxy provides a local development environment for building and testing AI agent scenarios. Define scenarios in YAML, run them against any LLM, and evaluate the results.
 
 **Use cases:**
