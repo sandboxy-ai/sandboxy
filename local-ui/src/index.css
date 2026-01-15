@@ -24,6 +24,22 @@
   --app-warm: #f59e0b;
 }
 
+:root.light {
+  color-scheme: light;
+  color: #1e293b;
+  background-color: #f8fafc;
+
+  --app-bg: #f8fafc;
+  --app-panel: rgba(255, 255, 255, 0.85);
+  --app-panel-solid: #ffffff;
+  --app-border: rgba(148, 163, 184, 0.25);
+  --app-text: #1e293b;
+  --app-muted: #64748b;
+  --app-accent: #f97316;
+  --app-accent-strong: #ea580c;
+  --app-warm: #d97706;
+}
+
 body {
   margin: 0;
   min-width: 320px;
@@ -55,6 +71,11 @@ pre,
   box-shadow: inset -1px 0 0 rgba(148, 163, 184, 0.08);
 }
 
+:root.light .sidebar {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(241, 245, 249, 0.98) 100%);
+  box-shadow: inset -1px 0 0 rgba(148, 163, 184, 0.15);
+}
+
 .nav-link {
   display: flex;
   align-items: center;
@@ -71,9 +92,9 @@ pre,
 }
 
 .nav-link[data-active="true"] {
-  color: #0b1117;
+  color: #ffffff;
   background: linear-gradient(120deg, var(--app-accent) 0%, var(--app-accent-strong) 100%);
-  box-shadow: 0 10px 25px rgba(14, 165, 233, 0.25);
+  box-shadow: 0 10px 25px rgba(249, 115, 22, 0.25);
 }
 
 .page {
@@ -106,6 +127,11 @@ pre,
   border-radius: 14px;
 }
 
+:root.light .panel-subtle {
+  background: rgba(241, 245, 249, 0.8);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
 @keyframes pageFade {
   from {
     opacity: 0;
@@ -115,4 +141,151 @@ pre,
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* Light mode color overrides for Tailwind slate classes */
+:root.light {
+  /* Text colors - invert the scale for light mode */
+  .text-slate-100 { color: #1e293b; }
+  .text-slate-200 { color: #334155; }
+  .text-slate-300 { color: #475569; }
+  .text-slate-400 { color: #64748b; }
+  .text-slate-500 { color: #64748b; }
+
+  /* Background colors */
+  .bg-slate-800 { background-color: #e2e8f0; }
+  .bg-slate-900 { background-color: #f1f5f9; }
+  .hover\:bg-slate-800:hover { background-color: #e2e8f0; }
+  .hover\:bg-slate-700:hover { background-color: #cbd5e1; }
+
+  /* Border colors */
+  .border-slate-700\/60 { border-color: rgba(203, 213, 225, 0.6); }
+  .border-slate-700\/80 { border-color: rgba(203, 213, 225, 0.8); }
+  .border-slate-800 { border-color: #e2e8f0; }
+  .border-slate-800\/70 { border-color: rgba(226, 232, 240, 0.7); }
+
+  /* Panel card shadow for light mode */
+  .panel-card {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+  .panel-card:hover {
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+  }
+}
+
+/* Light mode body background */
+:root.light body {
+  background-image: linear-gradient(180deg, rgba(241, 245, 249, 0.8) 0%, rgba(248, 250, 252, 0) 55%);
+}
+
+/* Light mode input/select styling */
+:root.light input,
+:root.light select,
+:root.light textarea {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
+}
+
+:root.light input::placeholder,
+:root.light textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+:root.light .bg-slate-900 {
+  background-color: #f8fafc !important;
+}
+
+:root.light .placeholder-slate-500::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Light mode selected state for orange items */
+:root.light .text-orange-300 {
+  color: #c2410c;
+}
+
+:root.light .bg-orange-500\/20 {
+  background-color: rgba(249, 115, 22, 0.15);
+}
+
+/* Checkbox border in light mode */
+:root.light .border-slate-600 {
+  border-color: #94a3b8;
+}
+
+/* More background overrides */
+:root.light .bg-slate-700 {
+  background-color: #e2e8f0;
+}
+
+:root.light .bg-slate-700\/80 {
+  background-color: rgba(226, 232, 240, 0.9);
+}
+
+:root.light .bg-slate-700\/50 {
+  background-color: rgba(226, 232, 240, 0.6);
+}
+
+:root.light .hover\:bg-slate-600:hover {
+  background-color: #cbd5e1;
+}
+
+:root.light .hover\:bg-slate-700\/50:hover {
+  background-color: rgba(226, 232, 240, 0.6);
+}
+
+:root.light .bg-slate-900\/60 {
+  background-color: rgba(248, 250, 252, 0.9);
+}
+
+:root.light .bg-slate-950 {
+  background-color: #f8fafc;
+}
+
+:root.light .bg-slate-950\/70 {
+  background-color: rgba(248, 250, 252, 0.9);
+}
+
+/* Pre/code blocks in light mode */
+:root.light pre {
+  background-color: #f1f5f9 !important;
+  color: #334155 !important;
+}
+
+:root.light .text-slate-300 {
+  color: #475569;
+}
+
+/* Border overrides */
+:root.light .border-slate-700 {
+  border-color: #cbd5e1;
+}
+
+:root.light .border-slate-700\/50 {
+  border-color: rgba(203, 213, 225, 0.5);
+}
+
+:root.light .border-slate-700\/70 {
+  border-color: rgba(203, 213, 225, 0.7);
+}
+
+:root.light .bg-slate-800\/60 {
+  background-color: rgba(226, 232, 240, 0.8);
+}
+
+:root.light .bg-slate-800\/50 {
+  background-color: rgba(226, 232, 240, 0.7);
+}
+
+:root.light .bg-slate-800\/40 {
+  background-color: rgba(226, 232, 240, 0.5);
+}
+
+:root.light .hover\:bg-slate-800\/60:hover {
+  background-color: rgba(203, 213, 225, 0.9);
+}
+
+:root.light .hover\:bg-slate-800\/40:hover {
+  background-color: rgba(203, 213, 225, 0.6);
 }

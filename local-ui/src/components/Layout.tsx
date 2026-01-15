@@ -1,5 +1,6 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
-import { Home, FileText, Wrench, Database } from 'lucide-react'
+import { Home, FileText, Wrench, Database, Sun, Moon } from 'lucide-react'
+import { useState, useEffect } from 'react'
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: Home },
@@ -10,14 +11,41 @@ const navItems = [
 
 export default function Layout() {
   const location = useLocation()
+  const [isLight, setIsLight] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('theme') === 'light'
+    }
+    return false
+  })
+
+  useEffect(() => {
+    if (isLight) {
+      document.documentElement.classList.add('light')
+      localStorage.setItem('theme', 'light')
+    } else {
+      document.documentElement.classList.remove('light')
+      localStorage.setItem('theme', 'dark')
+    }
+  }, [isLight])
 
   return (
     <div className="app-shell">
       {/* Sidebar */}
       <aside className="sidebar">
         <div className="p-5 border-b border-slate-800/70">
-          <h1 className="text-xl font-semibold text-slate-100">Sandboxy Local</h1>
-          <p className="text-sm text-slate-400">Development Server</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-semibold" style={{ color: 'var(--app-text)' }}>Sandboxy Local</h1>
+              <p className="text-sm" style={{ color: 'var(--app-muted)' }}>Development Server</p>
+            </div>
+            <button
+              onClick={() => setIsLight(!isLight)}
+              className="p-2 rounded-lg transition-colors hover:bg-slate-500/20"
+              title={isLight ? 'Switch to dark mode' : 'Switch to light mode'}
+            >
+              {isLight ? <Moon size={20} style={{ color: 'var(--app-muted)' }} /> : <Sun size={20} style={{ color: 'var(--app-muted)' }} />}
+            </button>
+          </div>
         </div>
 
         <nav className="p-4">
