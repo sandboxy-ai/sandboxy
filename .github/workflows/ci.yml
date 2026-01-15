@@ -7,7 +7,51 @@ on:
     branches: [main]
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Ruff check
+        run: uv run ruff check sandboxy tests
+
+      - name: Ruff format check
+        run: uv run ruff format --check sandboxy tests
+
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Pyright
+        run: uv run pyright sandboxy
+
   test:
+    name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -27,12 +71,6 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev
 
-      - name: Run linting
-        run: uv run ruff check sandboxy tests
-
-      - name: Run type checking
-        run: uv run mypy sandboxy
-
       - name: Run tests
         run: uv run pytest tests/ -v --cov=sandboxy --cov-report=xml
 
@@ -43,8 +81,8 @@ jobs:
           fail_ci_if_error: false
 
   validate-modules:
+    name: Validate Modules
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -67,8 +105,8 @@ jobs:
           done
 
   webui:
+    name: Web UI
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 

@@ -32,6 +32,9 @@ class LlmPromptAgent(BaseAgent):
         super().__init__(config)
         self._client: Any = None
         self._is_openrouter = "/" in (config.model or "")
+        # Token usage tracking
+        self._total_input_tokens = 0
+        self._total_output_tokens = 0
 
     @property
     def api_key(self) -> str:
@@ -200,6 +203,11 @@ class LlmPromptAgent(BaseAgent):
 
     def _parse_response(self, response: Any) -> AgentAction:
         """Parse OpenAI response into AgentAction."""
+        # Track token usage
+        if hasattr(response, "usage") and response.usage:
+            self._total_input_tokens += getattr(response.usage, "prompt_tokens", 0)
+            self._total_output_tokens += getattr(response.usage, "completion_tokens", 0)
+
         choice = response.choices[0]
         message = choice.message
 
@@ -238,6 +246,22 @@ class LlmPromptAgent(BaseAgent):
             type="message",
             content=message.content or "",
         )
+
+    def get_usage(self) -> dict[str, int]:
+        """Get accumulated token usage across all API calls.
+
+        Returns:
+            Dictionary with input_tokens and output_tokens counts.
+        """
+        return {
+            "input_tokens": self._total_input_tokens,
+            "output_tokens": self._total_output_tokens,
+        }
+
+    def reset_usage(self) -> None:
+        """Reset token usage counters."""
+        self._total_input_tokens = 0
+        self._total_output_tokens = 0
 
     def _stub_response(self, history: list[Message]) -> AgentAction:
         """Return stub response when no API key is configured."""
