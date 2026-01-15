@@ -38,7 +38,9 @@ class Agent(Protocol):
 
     config: AgentConfig
 
-    def step(self, history: list[Message], available_tools: list[dict[str, Any]] | None = None) -> AgentAction:
+    def step(
+        self, history: list[Message], available_tools: list[dict[str, Any]] | None = None
+    ) -> AgentAction:
         """Process conversation history and return next action.
 
         Args:
@@ -57,6 +59,8 @@ class BaseAgent:
     def __init__(self, config: AgentConfig) -> None:
         self.config = config
 
-    def step(self, history: list[Message], available_tools: list[dict[str, Any]] | None = None) -> AgentAction:
+    def step(
+        self, history: list[Message], available_tools: list[dict[str, Any]] | None = None
+    ) -> AgentAction:
         """Process history and return action. Override in subclasses."""
         return AgentAction(type="stop")

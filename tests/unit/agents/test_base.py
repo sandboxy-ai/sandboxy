@@ -1,6 +1,5 @@
 """Tests for agent base module."""
 
-
 from sandboxy.agents.base import AgentAction, AgentConfig, BaseAgent
 from sandboxy.core.state import Message
 from tests.factories import AgentConfigFactory

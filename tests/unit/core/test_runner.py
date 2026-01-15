@@ -1,6 +1,5 @@
 """Tests for the synchronous Runner engine."""
 
-
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -39,7 +38,11 @@ def mock_shopify_tool() -> MagicMock:
             return ToolResult(success=True, data={"refunded": True, "amount": 50.0})
         return ToolResult(
             success=True,
-            data={"order_id": args.get("order_id", "ORD123"), "status": "completed", "total": 99.99}
+            data={
+                "order_id": args.get("order_id", "ORD123"),
+                "status": "completed",
+                "total": 99.99,
+            },
         )
 
     tool.invoke.side_effect = mock_invoke
@@ -78,10 +81,12 @@ class TestRunner:
             StepFactory.await_agent(),
         ]
         module = ModuleSpecFactory.create(steps=steps)
-        agent = stub_agent([
-            AgentActionFactory.message("First response"),
-            AgentActionFactory.message("Second response"),
-        ])
+        agent = stub_agent(
+            [
+                AgentActionFactory.message("First response"),
+                AgentActionFactory.message("Second response"),
+            ]
+        )
 
         runner = Runner(module=module, agent=agent)
         result = runner.run()
@@ -96,10 +101,12 @@ class TestRunner:
     ) -> None:
         """Test running a module where agent makes tool calls."""
         module = ModuleSpecFactory.with_shopify_tool()
-        agent = stub_agent([
-            AgentActionFactory.tool_call("shopify", "get_order", {"order_id": "ORD123"}),
-            AgentActionFactory.message("I found your order."),
-        ])
+        agent = stub_agent(
+            [
+                AgentActionFactory.tool_call("shopify", "get_order", {"order_id": "ORD123"}),
+                AgentActionFactory.message("I found your order."),
+            ]
+        )
 
         with patch("sandboxy.core.runner.ToolLoader.from_env_config") as mock_loader:
             mock_loader.return_value = {"shopify": mock_shopify_tool}
@@ -121,11 +128,13 @@ class TestRunner:
     ) -> None:
         """Test agent making multiple tool calls before responding."""
         module = ModuleSpecFactory.with_shopify_tool()
-        agent = stub_agent([
-            AgentActionFactory.tool_call("shopify", "get_order", {"order_id": "ORD123"}),
-            AgentActionFactory.tool_call("shopify", "list_orders", {}),
-            AgentActionFactory.message("Here's the information."),
-        ])
+        agent = stub_agent(
+            [
+                AgentActionFactory.tool_call("shopify", "get_order", {"order_id": "ORD123"}),
+                AgentActionFactory.tool_call("shopify", "list_orders", {}),
+                AgentActionFactory.message("Here's the information."),
+            ]
+        )
 
         with patch("sandboxy.core.runner.ToolLoader.from_env_config") as mock_loader:
             mock_loader.return_value = {"shopify": mock_shopify_tool}
@@ -153,10 +162,12 @@ class TestRunner:
     def test_tool_not_found(self, stub_agent: type[StubAgent]) -> None:
         """Test calling a tool that doesn't exist."""
         module = ModuleSpecFactory.create()  # No tools
-        agent = stub_agent([
-            AgentActionFactory.tool_call("nonexistent", "action", {}),
-            AgentActionFactory.message("Tool not found."),
-        ])
+        agent = stub_agent(
+            [
+                AgentActionFactory.tool_call("nonexistent", "action", {}),
+                AgentActionFactory.message("Tool not found."),
+            ]
+        )
 
         runner = Runner(module=module, agent=agent)
         result = runner.run()
@@ -171,10 +182,12 @@ class TestRunner:
     ) -> None:
         """Test that tools can update env_state."""
         module = ModuleSpecFactory.with_shopify_tool(initial_balance=1000.0)
-        agent = stub_agent([
-            AgentActionFactory.tool_call("shopify", "refund_order", {"order_id": "ORD123"}),
-            AgentActionFactory.message("Refund processed."),
-        ])
+        agent = stub_agent(
+            [
+                AgentActionFactory.tool_call("shopify", "refund_order", {"order_id": "ORD123"}),
+                AgentActionFactory.message("Refund processed."),
+            ]
+        )
 
         with patch("sandboxy.core.runner.ToolLoader.from_env_config") as mock_loader:
             mock_loader.return_value = {"shopify": mock_shopify_tool}
@@ -190,10 +203,12 @@ class TestRunner:
     ) -> None:
         """Test that tool calls are properly added to history."""
         module = ModuleSpecFactory.with_shopify_tool()
-        agent = stub_agent([
-            AgentActionFactory.tool_call("shopify", "get_order", {"order_id": "ORD123"}),
-            AgentActionFactory.message("Done."),
-        ])
+        agent = stub_agent(
+            [
+                AgentActionFactory.tool_call("shopify", "get_order", {"order_id": "ORD123"}),
+                AgentActionFactory.message("Done."),
+            ]
+        )
 
         with patch("sandboxy.core.runner.ToolLoader.from_env_config") as mock_loader:
             mock_loader.return_value = {"shopify": mock_shopify_tool}
@@ -291,10 +306,12 @@ class TestRunnerEvaluation:
         module = ModuleSpecFactory.with_shopify_tool()
         module.evaluation = [EvaluationCheckFactory.tool_called(tool="shopify", action="get_order")]
 
-        agent = stub_agent([
-            AgentActionFactory.tool_call("shopify", "get_order", {"order_id": "ORD123"}),
-            AgentActionFactory.message("Done."),
-        ])
+        agent = stub_agent(
+            [
+                AgentActionFactory.tool_call("shopify", "get_order", {"order_id": "ORD123"}),
+                AgentActionFactory.message("Done."),
+            ]
+        )
 
         with patch("sandboxy.core.runner.ToolLoader.from_env_config") as mock_loader:
             mock_loader.return_value = {"shopify": mock_shopify_tool}

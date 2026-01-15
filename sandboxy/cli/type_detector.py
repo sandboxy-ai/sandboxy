@@ -30,8 +30,7 @@ def detect_yaml_type(data: dict[str, Any]) -> YamlType:
         explicit_type = data["type"]
         if explicit_type not in VALID_TYPES:
             raise ValueError(
-                f"Invalid type '{explicit_type}'. "
-                f"Valid types: {', '.join(sorted(VALID_TYPES))}"
+                f"Invalid type '{explicit_type}'. Valid types: {', '.join(sorted(VALID_TYPES))}"
             )
         return explicit_type  # type: ignore[return-value]
 

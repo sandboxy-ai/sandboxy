@@ -323,13 +323,15 @@ async def list_local_runs() -> list[dict[str, Any]]:
         for path in sorted(ctx.runs_dir.glob("*.json"), reverse=True):
             try:
                 data = json.loads(path.read_text())
-                runs.append({
-                    "filename": path.name,
-                    "path": str(path),
-                    "scenario_id": data.get("scenario_id"),
-                    "timestamp": data.get("timestamp"),
-                    "metadata": data.get("metadata", {}),
-                })
+                runs.append(
+                    {
+                        "filename": path.name,
+                        "path": str(path),
+                        "scenario_id": data.get("scenario_id"),
+                        "timestamp": data.get("timestamp"),
+                        "metadata": data.get("metadata", {}),
+                    }
+                )
             except Exception:
                 # Skip invalid files
                 continue
@@ -596,18 +598,20 @@ async def list_available_models() -> list[dict[str, Any]]:
         else:
             price = f"${info.input_cost_per_million:.2f}/${info.output_cost_per_million:.2f}"
 
-        models.append({
-            "id": model_id,
-            "name": info.name,
-            "price": price,
-            "pricing": {
-                "input": info.input_cost_per_million or 0,
-                "output": info.output_cost_per_million or 0,
-            },
-            "provider": info.provider,
-            "context_length": info.context_length,
-            "supports_vision": info.supports_vision,
-        })
+        models.append(
+            {
+                "id": model_id,
+                "name": info.name,
+                "price": price,
+                "pricing": {
+                    "input": info.input_cost_per_million or 0,
+                    "output": info.output_cost_per_million or 0,
+                },
+                "provider": info.provider,
+                "context_length": info.context_length,
+                "supports_vision": info.supports_vision,
+            }
+        )
 
     return models
 
@@ -824,6 +828,7 @@ async def save_tool(request: SaveToolRequest) -> SaveToolResponse:
 
     # Clear tool cache so new tools are discovered
     from sandboxy.tools.loader import discover_python_tools
+
     discover_python_tools(refresh=True)
 
     return SaveToolResponse(
@@ -951,14 +956,16 @@ async def list_local_datasets() -> list[DatasetInfo]:
                             if isinstance(values, list):
                                 case_count *= len(values)
 
-                    datasets.append(DatasetInfo(
-                        id=path.stem,
-                        name=content.get("name", path.stem),
-                        description=content.get("description", ""),
-                        case_count=case_count,
-                        path=str(path),
-                        relative_path=str(path.relative_to(ctx.root_dir)),
-                    ))
+                    datasets.append(
+                        DatasetInfo(
+                            id=path.stem,
+                            name=content.get("name", path.stem),
+                            description=content.get("description", ""),
+                            case_count=case_count,
+                            path=str(path),
+                            relative_path=str(path.relative_to(ctx.root_dir)),
+                        )
+                    )
             except Exception as e:
                 logger.warning(f"Error loading dataset {path}: {e}")
                 continue
@@ -1004,13 +1011,15 @@ async def get_local_dataset(dataset_id: str) -> DatasetDetail:
         else:
             expected = [expected_raw]
 
-        cases.append(DatasetCaseInfo(
-            id=case_data.get("id", ""),
-            expected=expected,
-            variables=case_data.get("variables", {}),
-            tool_responses=case_data.get("tool_responses", {}),
-            tags=case_data.get("tags", []),
-        ))
+        cases.append(
+            DatasetCaseInfo(
+                id=case_data.get("id", ""),
+                expected=expected,
+                variables=case_data.get("variables", {}),
+                tool_responses=case_data.get("tool_responses", {}),
+                tags=case_data.get("tags", []),
+            )
+        )
 
     return DatasetDetail(
         id=dataset_id,
@@ -1057,12 +1066,14 @@ async def get_scenario_goals(scenario_id: str) -> list[ScenarioGoalInfo]:
         goals = []
         if spec.evaluation and spec.evaluation.goals:
             for goal in spec.evaluation.goals:
-                goals.append(ScenarioGoalInfo(
-                    id=goal.id,
-                    name=goal.name,
-                    description=goal.description,
-                    outcome=goal.outcome,
-                ))
+                goals.append(
+                    ScenarioGoalInfo(
+                        id=goal.id,
+                        name=goal.name,
+                        description=goal.description,
+                        outcome=goal.outcome,
+                    )
+                )
 
         return goals
 
@@ -1131,11 +1142,13 @@ async def get_scenario_tools(scenario_id: str) -> list[ScenarioToolInfo]:
                     )
                     for action_name, action_spec in tool_spec.get_effective_actions().items()
                 ]
-                tools_info.append(ScenarioToolInfo(
-                    name=tool_name,
-                    description=tool_spec.description,
-                    actions=actions,
-                ))
+                tools_info.append(
+                    ScenarioToolInfo(
+                        name=tool_name,
+                        description=tool_spec.description,
+                        actions=actions,
+                    )
+                )
 
         # Get tools from libraries
         for lib_name in spec.tools_from:
@@ -1152,11 +1165,13 @@ async def get_scenario_tools(scenario_id: str) -> list[ScenarioToolInfo]:
                         )
                         for action_name, action_spec in tool_spec.get_effective_actions().items()
                     ]
-                    tools_info.append(ScenarioToolInfo(
-                        name=tool_name,
-                        description=tool_spec.description,
-                        actions=actions,
-                    ))
+                    tools_info.append(
+                        ScenarioToolInfo(
+                            name=tool_name,
+                            description=tool_spec.description,
+                            actions=actions,
+                        )
+                    )
 
         return tools_info
 

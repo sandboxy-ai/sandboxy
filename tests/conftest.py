@@ -27,7 +27,9 @@ from sandboxy.tools.base import ToolConfig, ToolResult
 
 def pytest_configure(config: pytest.Config) -> None:
     """Configure pytest markers."""
-    config.addinivalue_line("markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')")
+    config.addinivalue_line(
+        "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
+    )
     config.addinivalue_line("markers", "integration: marks tests as integration tests")
     config.addinivalue_line("markers", "e2e: marks tests as end-to-end tests")
     config.addinivalue_line("markers", "requires_api_key: marks tests requiring real API keys")

@@ -97,13 +97,15 @@ class MockOpenRouterProvider(BaseProvider):
 
         """
         # Record the call
-        self.call_history.append({
-            "model": model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            **kwargs,
-        })
+        self.call_history.append(
+            {
+                "model": model,
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                **kwargs,
+            }
+        )
 
         if self.should_fail:
             raise ProviderError(
@@ -211,11 +213,13 @@ class MockOpenAIProvider(BaseProvider):
         messages: list[dict[str, Any]],
         **kwargs: Any,
     ) -> ModelResponse:
-        self.call_history.append({
-            "model": model,
-            "messages": messages,
-            **kwargs,
-        })
+        self.call_history.append(
+            {
+                "model": model,
+                "messages": messages,
+                **kwargs,
+            }
+        )
 
         if self.should_fail:
             raise ProviderError(
@@ -269,11 +273,13 @@ class MockAnthropicProvider(BaseProvider):
         messages: list[dict[str, Any]],
         **kwargs: Any,
     ) -> ModelResponse:
-        self.call_history.append({
-            "model": model,
-            "messages": messages,
-            **kwargs,
-        })
+        self.call_history.append(
+            {
+                "model": model,
+                "messages": messages,
+                **kwargs,
+            }
+        )
 
         if self.should_fail:
             raise ProviderError(
@@ -390,13 +396,15 @@ def create_mock_openai_client(
     mock_client = MagicMock()
 
     default_response = {
-        "choices": [{
-            "message": {
-                "content": "Mock OpenAI response",
-                "tool_calls": tool_calls,
-            },
-            "finish_reason": "stop",
-        }],
+        "choices": [
+            {
+                "message": {
+                    "content": "Mock OpenAI response",
+                    "tool_calls": tool_calls,
+                },
+                "finish_reason": "stop",
+            }
+        ],
         "usage": {
             "prompt_tokens": 50,
             "completion_tokens": 100,
@@ -405,7 +413,7 @@ def create_mock_openai_client(
 
     # Build response sequence
     response_sequence = []
-    for resp in (responses or [default_response]):
+    for resp in responses or [default_response]:
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
 

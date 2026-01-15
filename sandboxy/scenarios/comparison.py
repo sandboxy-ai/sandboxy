@@ -315,19 +315,11 @@ class ComparisonResult:
         sep = "+" + "+".join("-" * (w + 2) for w in widths) + "+"
 
         lines.append(sep)
-        lines.append(
-            "|"
-            + "|".join(f" {h.ljust(widths[i])} " for i, h in enumerate(headers))
-            + "|"
-        )
+        lines.append("|" + "|".join(f" {h.ljust(widths[i])} " for i, h in enumerate(headers)) + "|")
         lines.append(sep)
 
         for row in rows:
-            lines.append(
-                "|"
-                + "|".join(f" {c.ljust(widths[i])} " for i, c in enumerate(row))
-                + "|"
-            )
+            lines.append("|" + "|".join(f" {c.ljust(widths[i])} " for i, c in enumerate(row)) + "|")
 
         lines.append(sep)
 
@@ -473,11 +465,7 @@ async def run_comparison(
     if parallel:
         # Run ALL iterations for ALL models in parallel
         # Creates [(model, task), ...] for every model × runs_per_model
-        tasks = [
-            run_single(model)
-            for model in models
-            for _ in range(runs_per_model)
-        ]
+        tasks = [run_single(model) for model in models for _ in range(runs_per_model)]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for result in results:
             if isinstance(result, Exception):

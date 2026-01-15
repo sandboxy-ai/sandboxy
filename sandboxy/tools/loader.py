@@ -32,6 +32,7 @@ YAML_TOOL_DIRS = [
     Path("sandboxy/tools/libraries"),
 ]
 
+
 def get_tool_dirs() -> list[Path]:
     """Get tool directories, including local context if available.
 

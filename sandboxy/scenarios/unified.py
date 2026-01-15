@@ -250,7 +250,13 @@ class EvaluationResult:
         """Convert to dictionary."""
         return {
             "goals": [
-                {"id": g.id, "name": g.name, "achieved": g.achieved, "points": g.points, "reason": g.reason}
+                {
+                    "id": g.id,
+                    "name": g.name,
+                    "achieved": g.achieved,
+                    "points": g.points,
+                    "reason": g.reason,
+                }
                 for g in self.goals
             ],
             "judge": {
@@ -296,7 +302,8 @@ class RunResult:
             "prompt": self.prompt,
             "response": self.response,
             "history": [
-                {"role": m.role, "content": m.content, "tool_name": m.tool_name} for m in self.history
+                {"role": m.role, "content": m.content, "tool_name": m.tool_name}
+                for m in self.history
             ],
             "tool_calls": [
                 {
@@ -348,7 +355,9 @@ class RunResult:
                 lines.append(f"Goals: {achieved}/{len(self.evaluation.goals)}")
             if self.evaluation.judge:
                 lines.append(f"Judge Score: {self.evaluation.judge.score:.2f}")
-            lines.append(f"Total Score: {self.evaluation.total_score:.1f}/{self.evaluation.max_score:.1f}")
+            lines.append(
+                f"Total Score: {self.evaluation.total_score:.1f}/{self.evaluation.max_score:.1f}"
+            )
             lines.append(f"Percentage: {self.evaluation.percentage:.1f}%")
 
         if self.error:
@@ -397,9 +406,7 @@ class UnifiedRunner:
             self._registry = get_registry()
         return self._registry
 
-    def _calculate_cost(
-        self, model: str, input_tokens: int, output_tokens: int
-    ) -> float | None:
+    def _calculate_cost(self, model: str, input_tokens: int, output_tokens: int) -> float | None:
         """Calculate cost in USD based on model pricing.
 
         Uses pricing data from OpenRouter models registry.
@@ -458,9 +465,7 @@ class UnifiedRunner:
                     scenario, model, max_turns, max_tokens, temperature, tool_overrides
                 )
             else:
-                result = await self._run_single_turn(
-                    scenario, model, max_tokens, temperature
-                )
+                result = await self._run_single_turn(scenario, model, max_tokens, temperature)
 
             # Run evaluation if configured
             if scenario.has_evaluation():
@@ -655,7 +660,9 @@ class UnifiedRunner:
                         ]
 
                         # Get agent action
-                        action: AgentAction = agent.step(history_for_agent, tool_schemas if tools else None)
+                        action: AgentAction = agent.step(
+                            history_for_agent, tool_schemas if tools else None
+                        )
 
                         if action.type == "message":
                             history.append(Message(role="assistant", content=action.content or ""))
@@ -688,7 +695,9 @@ class UnifiedRunner:
                             if tool_name in tools:
                                 tool = tools[tool_name]
                                 if hasattr(tool, "invoke_async"):
-                                    result = await tool.invoke_async(tool_action, tool_args, env_state)
+                                    result = await tool.invoke_async(
+                                        tool_action, tool_args, env_state
+                                    )
                                 else:
                                     result = tool.invoke(tool_action, tool_args, env_state)
 
@@ -703,7 +712,9 @@ class UnifiedRunner:
                                     )
                                 )
 
-                                result_content = result.data if result.success else (result.error or "")
+                                result_content = (
+                                    result.data if result.success else (result.error or "")
+                                )
                                 if not isinstance(result_content, str):
                                     result_content = json.dumps(result_content)
 
@@ -1013,12 +1024,14 @@ Respond with ONLY the JSON, no other text."""
         try:
             provider = self.registry.get_provider_for_model(model)
             # Shield from external cancellation (e.g., MCP's anyio cancel scopes)
-            response = await asyncio.shield(provider.complete(
-                model=model,
-                messages=[{"role": "user", "content": judge_prompt}],
-                temperature=0.1,
-                max_tokens=500,
-            ))
+            response = await asyncio.shield(
+                provider.complete(
+                    model=model,
+                    messages=[{"role": "user", "content": judge_prompt}],
+                    temperature=0.1,
+                    max_tokens=500,
+                )
+            )
 
             # Parse JSON
             content = response.content.strip()

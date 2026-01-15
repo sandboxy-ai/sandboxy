@@ -71,7 +71,9 @@ def module_with_tools() -> ModuleSpec:
         name="Test With Tools",
         version="1.0.0",
         steps=[
-            Step(id="step1", action=StepAction.INJECT_USER.value, params={"content": "Get my order"}),
+            Step(
+                id="step1", action=StepAction.INJECT_USER.value, params={"content": "Get my order"}
+            ),
             Step(id="step2", action=StepAction.AWAIT_AGENT.value, params={}),
         ],
         environment=EnvConfig(
@@ -96,8 +98,7 @@ def mock_shopify_tool() -> MagicMock:
         {"name": "refund_order", "description": "Process refund", "parameters": {}},
     ]
     tool.invoke.return_value = ToolResult(
-        success=True,
-        data={"order_id": "ORD123", "status": "completed", "total": 99.99}
+        success=True, data={"order_id": "ORD123", "status": "completed", "total": 99.99}
     )
     return tool
 
@@ -114,7 +115,9 @@ def module_with_branch() -> ModuleSpec:
         ],
         branches={
             "alt_path": [
-                Step(id="alt1", action=StepAction.INJECT_USER.value, params={"content": "Alt path"}),
+                Step(
+                    id="alt1", action=StepAction.INJECT_USER.value, params={"content": "Alt path"}
+                ),
             ],
         },
         environment=EnvConfig(tools=[], initial_state={}),
@@ -197,9 +200,7 @@ class TestAsyncRunnerInit:
         assert runner.history == []
         assert runner.events == []
 
-    def test_copies_initial_state(
-        self, simple_module: ModuleSpec, mock_agent: MagicMock
-    ) -> None:
+    def test_copies_initial_state(self, simple_module: ModuleSpec, mock_agent: MagicMock) -> None:
         """Test that initial state is copied, not referenced."""
         runner = AsyncRunner(simple_module, mock_agent)
 
@@ -209,9 +210,7 @@ class TestAsyncRunnerInit:
         # Original should be unchanged
         assert simple_module.environment.initial_state["counter"] == 0
 
-    def test_session_state_property(
-        self, simple_module: ModuleSpec, mock_agent: MagicMock
-    ) -> None:
+    def test_session_state_property(self, simple_module: ModuleSpec, mock_agent: MagicMock) -> None:
         """Test session_state property."""
         runner = AsyncRunner(simple_module, mock_agent)
 
@@ -374,9 +373,7 @@ class TestAsyncRunnerAwaitAgent:
         assert "tool_result" in event_types
 
     @pytest.mark.asyncio
-    async def test_await_agent_handles_stop_action(
-        self, simple_module: ModuleSpec
-    ) -> None:
+    async def test_await_agent_handles_stop_action(self, simple_module: ModuleSpec) -> None:
         """Test that await_agent handles stop action."""
         agent = MagicMock()
         agent.step.return_value = AgentAction(type="stop")
@@ -415,17 +412,23 @@ class TestAsyncRunnerBranch:
         assert any(e.payload.get("content") == "Alt path" for e in user_events)
 
     @pytest.mark.asyncio
-    async def test_branch_to_nonexistent_continues(
-        self, mock_agent: MagicMock
-    ) -> None:
+    async def test_branch_to_nonexistent_continues(self, mock_agent: MagicMock) -> None:
         """Test that branching to nonexistent branch continues."""
         module = ModuleSpec(
             id="test/bad-branch",
             name="Bad Branch",
             version="1.0.0",
             steps=[
-                Step(id="step1", action=StepAction.BRANCH.value, params={"branch_name": "nonexistent"}),
-                Step(id="step2", action=StepAction.INJECT_USER.value, params={"content": "After branch"}),
+                Step(
+                    id="step1",
+                    action=StepAction.BRANCH.value,
+                    params={"branch_name": "nonexistent"},
+                ),
+                Step(
+                    id="step2",
+                    action=StepAction.INJECT_USER.value,
+                    params={"content": "After branch"},
+                ),
             ],
             environment=EnvConfig(tools=[], initial_state={}),
             evaluation=[],
@@ -446,9 +449,7 @@ class TestAsyncRunnerDirectToolCall:
     """Tests for direct tool_call step handling."""
 
     @pytest.mark.asyncio
-    async def test_direct_tool_call_invokes_tool(
-        self, mock_shopify_tool: MagicMock
-    ) -> None:
+    async def test_direct_tool_call_invokes_tool(self, mock_shopify_tool: MagicMock) -> None:
         """Test that direct tool_call invokes the tool."""
         module = ModuleSpec(
             id="test/direct-tool",
@@ -527,8 +528,7 @@ class TestAsyncRunnerInjectEvent:
 
         # Set up the mock tool to handle trigger_event
         mock_shopify_tool.invoke.return_value = ToolResult(
-            success=True,
-            data={"event": "new_order", "triggered": True}
+            success=True, data={"event": "new_order", "triggered": True}
         )
 
         with patch("sandboxy.core.async_runner.ToolLoader.from_env_config") as mock_loader:
@@ -771,9 +771,7 @@ class TestAsyncRunnerCheckTypes:
 class TestAsyncRunnerScoring:
     """Tests for scoring calculations."""
 
-    def test_weighted_average(
-        self, simple_module: ModuleSpec, mock_agent: MagicMock
-    ) -> None:
+    def test_weighted_average(self, simple_module: ModuleSpec, mock_agent: MagicMock) -> None:
         """Test weighted average calculation."""
         runner = AsyncRunner(simple_module, mock_agent)
 
@@ -798,9 +796,7 @@ class TestAsyncRunnerScoring:
 
         assert result == 0.5  # (1.0 + 0.0) / 2
 
-    def test_weighted_average_empty(
-        self, simple_module: ModuleSpec, mock_agent: MagicMock
-    ) -> None:
+    def test_weighted_average_empty(self, simple_module: ModuleSpec, mock_agent: MagicMock) -> None:
         """Test weighted average with empty values."""
         runner = AsyncRunner(simple_module, mock_agent)
 
@@ -808,9 +804,7 @@ class TestAsyncRunnerScoring:
 
         assert result == 0.0
 
-    def test_compute_score_with_formula(
-        self, mock_agent: MagicMock
-    ) -> None:
+    def test_compute_score_with_formula(self, mock_agent: MagicMock) -> None:
         """Test score computation with formula."""
         module = ModuleSpec(
             id="test/formula",
@@ -829,9 +823,7 @@ class TestAsyncRunnerScoring:
 
         assert score == 25.0  # 10 * 2 + 5
 
-    def test_compute_score_normalized(
-        self, mock_agent: MagicMock
-    ) -> None:
+    def test_compute_score_normalized(self, mock_agent: MagicMock) -> None:
         """Test score normalization."""
         module = ModuleSpec(
             id="test/normalize",
@@ -920,18 +912,14 @@ class TestAsyncRunnerTargetHelpers:
 class TestAsyncRunnerPassCondition:
     """Tests for _evaluate_pass_condition helper."""
 
-    def test_evaluate_greater_than(
-        self, simple_module: ModuleSpec, mock_agent: MagicMock
-    ) -> None:
+    def test_evaluate_greater_than(self, simple_module: ModuleSpec, mock_agent: MagicMock) -> None:
         """Test > condition."""
         runner = AsyncRunner(simple_module, mock_agent)
 
         assert runner._evaluate_pass_condition(10.0, ">5") is True
         assert runner._evaluate_pass_condition(3.0, ">5") is False
 
-    def test_evaluate_less_than(
-        self, simple_module: ModuleSpec, mock_agent: MagicMock
-    ) -> None:
+    def test_evaluate_less_than(self, simple_module: ModuleSpec, mock_agent: MagicMock) -> None:
         """Test < condition."""
         runner = AsyncRunner(simple_module, mock_agent)
 
@@ -948,18 +936,14 @@ class TestAsyncRunnerPassCondition:
         assert runner._evaluate_pass_condition(6.0, ">=5") is True
         assert runner._evaluate_pass_condition(4.0, ">=5") is False
 
-    def test_evaluate_equals(
-        self, simple_module: ModuleSpec, mock_agent: MagicMock
-    ) -> None:
+    def test_evaluate_equals(self, simple_module: ModuleSpec, mock_agent: MagicMock) -> None:
         """Test == condition."""
         runner = AsyncRunner(simple_module, mock_agent)
 
         assert runner._evaluate_pass_condition(5.0, "==5") is True
         assert runner._evaluate_pass_condition(6.0, "==5") is False
 
-    def test_evaluate_not_equals(
-        self, simple_module: ModuleSpec, mock_agent: MagicMock
-    ) -> None:
+    def test_evaluate_not_equals(self, simple_module: ModuleSpec, mock_agent: MagicMock) -> None:
         """Test != condition."""
         runner = AsyncRunner(simple_module, mock_agent)
 

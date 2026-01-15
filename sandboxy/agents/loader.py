@@ -152,9 +152,7 @@ class AgentLoader:
             config = next(iter(self._configs.values()))
             return self._instantiate(config)
 
-        raise ValueError(
-            "No agents available. Specify a model with -m (e.g., -m openai/gpt-4o)"
-        )
+        raise ValueError("No agents available. Specify a model with -m (e.g., -m openai/gpt-4o)")
 
     def _instantiate(self, config: AgentConfig) -> Agent:
         """Create agent instance from configuration.

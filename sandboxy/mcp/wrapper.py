@@ -79,9 +79,7 @@ class McpToolWrapper:
         env_state: dict[str, Any],
     ) -> ToolResult:
         """Synchronous invoke - raises error, use invoke_async instead."""
-        raise RuntimeError(
-            "MCP tools must be invoked asynchronously. Use invoke_async() instead."
-        )
+        raise RuntimeError("MCP tools must be invoked asynchronously. Use invoke_async() instead.")
 
     def get_actions(self) -> list[dict[str, Any]]:
         """Get available actions with their schemas.
@@ -92,7 +90,8 @@ class McpToolWrapper:
             {
                 "name": "call",
                 "description": self.description,
-                "parameters": self._input_schema or {
+                "parameters": self._input_schema
+                or {
                     "type": "object",
                     "properties": {},
                 },

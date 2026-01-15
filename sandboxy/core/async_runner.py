@@ -91,7 +91,9 @@ class AsyncRunner:
             raise RuntimeError("Not currently awaiting user input")
         self._user_input_future.set_result(content)
 
-    def inject_event(self, tool_name: str, event_type: str, args: dict[str, Any] | None = None) -> dict[str, Any]:
+    def inject_event(
+        self, tool_name: str, event_type: str, args: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Inject a game event by calling a tool's trigger_event action.
 
         This is used for chaos injection - frontend can trigger events like
@@ -277,10 +279,12 @@ class AsyncRunner:
                 if tool_call_count > 0 and not hasattr(self, "_retry_after_tool"):
                     self._retry_after_tool = True
                     # Add a system hint to prompt the agent to respond
-                    self.history.append(Message(
-                        role="user",
-                        content="[System: Please respond to the customer based on the information you just retrieved.]"
-                    ))
+                    self.history.append(
+                        Message(
+                            role="user",
+                            content="[System: Please respond to the customer based on the information you just retrieved.]",
+                        )
+                    )
                     continue  # Retry the loop
 
                 # Clean up retry flag
@@ -565,13 +569,9 @@ class AsyncRunner:
     def _get_target_text(self, target: str) -> str:
         """Get text content for a target."""
         if target == "agent_messages":
-            return " ".join(
-                msg.content for msg in self.history if msg.role == "assistant"
-            )
+            return " ".join(msg.content for msg in self.history if msg.role == "assistant")
         if target == "user_messages":
-            return " ".join(
-                msg.content for msg in self.history if msg.role == "user"
-            )
+            return " ".join(msg.content for msg in self.history if msg.role == "user")
         if target == "all_messages":
             return " ".join(msg.content for msg in self.history)
         if target == "last_agent_message":
@@ -595,9 +595,7 @@ class AsyncRunner:
         if target == "all_messages":
             return list(self.history)
         if target == "tool_calls":
-            return [
-                event for event in self.events if event.type == "tool_call"
-            ]
+            return [event for event in self.events if event.type == "tool_call"]
         return []
 
     def _check_contains(self, check: Any) -> dict[str, Any]:

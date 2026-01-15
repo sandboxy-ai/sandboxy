@@ -71,8 +71,6 @@ def create_local_app(
 
     # Serve local UI if available
     if local_ui_path and local_ui_path.exists():
-        app.mount(
-            "/", StaticFiles(directory=str(local_ui_path), html=True), name="local-ui"
-        )
+        app.mount("/", StaticFiles(directory=str(local_ui_path), html=True), name="local-ui")
 
     return app

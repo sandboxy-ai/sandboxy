@@ -65,9 +65,7 @@ class TestLlmPromptAgentInit:
 class TestLlmPromptAgentApiKey:
     """Tests for API key handling."""
 
-    def test_uses_openai_key(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_uses_openai_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that OPENAI_API_KEY is used."""
         monkeypatch.setenv("OPENAI_API_KEY", "oai-key")
 
@@ -339,7 +337,9 @@ class TestLlmPromptAgentParseResponse:
         response.choices[0].message.content = None
         response.choices[0].message.tool_calls = [MagicMock()]
         response.choices[0].message.tool_calls[0].id = "call_123"
-        response.choices[0].message.tool_calls[0].function.name = "shopify_refund"  # Single underscore
+        response.choices[0].message.tool_calls[
+            0
+        ].function.name = "shopify_refund"  # Single underscore
         response.choices[0].message.tool_calls[0].function.arguments = '{"order_id": "123"}'
         response.choices[0].finish_reason = "tool_calls"
 

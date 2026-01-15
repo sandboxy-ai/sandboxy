@@ -72,10 +72,7 @@ def parse_module(raw: dict[str, Any]) -> ModuleSpec:
     for v in raw.get("variables", []):
         options = None
         if v.get("options"):
-            options = [
-                VariableOption(value=o["value"], label=o["label"])
-                for o in v["options"]
-            ]
+            options = [VariableOption(value=o["value"], label=o["label"]) for o in v["options"]]
         variables.append(
             ModuleVariable(
                 name=v["name"],
@@ -203,10 +200,7 @@ def interpolate_template(text: str, variables: dict[str, Any]) -> str:
 
     # Process conditional blocks with support for else-if chains
     # Match {{#if ...}}...{{/if}} blocks
-    if_pattern = re.compile(
-        r"\{\{#if\s+(.+?)\}\}(.*?)\{\{/if\}\}",
-        re.DOTALL
-    )
+    if_pattern = re.compile(r"\{\{#if\s+(.+?)\}\}(.*?)\{\{/if\}\}", re.DOTALL)
 
     def eval_if_block(match: re.Match) -> str:
         condition = match.group(1).strip()
@@ -358,9 +352,7 @@ def apply_variables(module: ModuleSpec, variables: dict[str, Any]) -> ModuleSpec
             )
         )
 
-    new_initial_state = _interpolate_value(
-        dict(module.environment.initial_state), var_dict
-    )
+    new_initial_state = _interpolate_value(dict(module.environment.initial_state), var_dict)
 
     new_environment = EnvConfig(
         sandbox_type=module.environment.sandbox_type,

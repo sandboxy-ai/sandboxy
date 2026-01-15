@@ -23,10 +23,12 @@ class TestOpenRouterProvider:
         return {
             "id": "gen-123",
             "model": "openai/gpt-4o",
-            "choices": [{
-                "message": {"content": "Test response"},
-                "finish_reason": "stop",
-            }],
+            "choices": [
+                {
+                    "message": {"content": "Test response"},
+                    "finish_reason": "stop",
+                }
+            ],
             "usage": {
                 "prompt_tokens": 100,
                 "completion_tokens": 50,
@@ -159,9 +161,7 @@ class TestOpenRouterProvider:
         import httpx
 
         mock_client_instance = MagicMock()
-        mock_client_instance.post = AsyncMock(
-            side_effect=httpx.RequestError("Connection failed")
-        )
+        mock_client_instance.post = AsyncMock(side_effect=httpx.RequestError("Connection failed"))
         mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
         mock_client_instance.__aexit__ = AsyncMock(return_value=None)
 
@@ -254,12 +254,15 @@ class TestOpenRouterModels:
             assert info.input_cost_per_million is not None
             assert info.input_cost_per_million >= 0
 
-    @pytest.mark.parametrize("model_id", [
-        "openai/gpt-4o",
-        "anthropic/claude-3.5-sonnet",
-        "google/gemini-2.0-flash-exp:free",
-        "deepseek/deepseek-chat",
-    ])
+    @pytest.mark.parametrize(
+        "model_id",
+        [
+            "openai/gpt-4o",
+            "anthropic/claude-3.5-sonnet",
+            "google/gemini-2.0-flash-exp:free",
+            "deepseek/deepseek-chat",
+        ],
+    )
     def test_key_models_defined(self, model_id: str) -> None:
         """Test that key models are defined."""
         assert model_id in OPENROUTER_MODELS
@@ -269,10 +272,7 @@ class TestOpenRouterModels:
 
     def test_free_models_have_zero_cost(self) -> None:
         """Test that free models have zero cost."""
-        free_models = [
-            model_id for model_id in OPENROUTER_MODELS
-            if ":free" in model_id
-        ]
+        free_models = [model_id for model_id in OPENROUTER_MODELS if ":free" in model_id]
         for model_id in free_models:
             info = OPENROUTER_MODELS[model_id]
             assert info.input_cost_per_million == 0.0

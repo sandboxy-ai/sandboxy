@@ -294,11 +294,13 @@ class Runner:
         """Get tool schemas for agent tool calling."""
         schemas = []
         for name, tool in self.tools.items():
-            schemas.append({
-                "name": name,
-                "description": tool.description,
-                "actions": tool.get_actions(),
-            })
+            schemas.append(
+                {
+                    "name": name,
+                    "description": tool.description,
+                    "actions": tool.get_actions(),
+                }
+            )
         return schemas
 
     def _evaluate(self) -> EvaluationResult:
@@ -349,13 +351,9 @@ class Runner:
     def _get_target_text(self, target: str) -> str:
         """Get text content for a target."""
         if target == "agent_messages":
-            return " ".join(
-                msg.content for msg in self.history if msg.role == "assistant"
-            )
+            return " ".join(msg.content for msg in self.history if msg.role == "assistant")
         if target == "user_messages":
-            return " ".join(
-                msg.content for msg in self.history if msg.role == "user"
-            )
+            return " ".join(msg.content for msg in self.history if msg.role == "user")
         if target == "all_messages":
             return " ".join(msg.content for msg in self.history)
         if target == "last_agent_message":
@@ -514,8 +512,15 @@ class Runner:
     def _eval_score_formula(self, formula: str, check_values: dict[str, float]) -> float:
         """Evaluate a score formula."""
         safe_builtins = {
-            "True": True, "False": False, "None": None,
-            "len": len, "min": min, "max": max, "abs": abs, "sum": sum, "round": round,
+            "True": True,
+            "False": False,
+            "None": None,
+            "len": len,
+            "min": min,
+            "max": max,
+            "abs": abs,
+            "sum": sum,
+            "round": round,
         }
         context = {"__builtins__": safe_builtins, "env_state": self.env_state}
         context.update(check_values)

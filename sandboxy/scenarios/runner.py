@@ -220,9 +220,7 @@ class ScenarioRunner:
     def _add_user_message(self, content: str) -> None:
         """Add a user message to history."""
         self.history.append(Message(role="user", content=content))
-        self.events.append(
-            ScenarioEvent(type="user", payload={"content": content})
-        )
+        self.events.append(ScenarioEvent(type="user", payload={"content": content}))
 
     async def _get_agent_response(self, max_tool_calls: int = 10) -> None:
         """Get agent response, handling tool calls."""
@@ -266,9 +264,7 @@ class ScenarioRunner:
             if action.type == "message":
                 # Agent responded with a message
                 self.history.append(Message(role="assistant", content=action.content or ""))
-                self.events.append(
-                    ScenarioEvent(type="agent", payload={"content": action.content})
-                )
+                self.events.append(ScenarioEvent(type="agent", payload={"content": action.content}))
                 return
 
             if action.type == "tool_call":
@@ -387,11 +383,13 @@ class ScenarioRunner:
         """Get tool schemas for agent."""
         schemas = []
         for name, tool in self.tools.items():
-            schemas.append({
-                "name": name,
-                "description": tool.description,
-                "actions": tool.get_actions(),
-            })
+            schemas.append(
+                {
+                    "name": name,
+                    "description": tool.description,
+                    "actions": tool.get_actions(),
+                }
+            )
         return schemas
 
     def _evaluate_goals(self) -> list[str]:
@@ -432,9 +430,7 @@ class ScenarioRunner:
                 # Check if agent messages contain patterns
                 patterns = detection.get("patterns", [])
                 agent_text = " ".join(
-                    e.payload.get("content", "")
-                    for e in self.events
-                    if e.type == "agent"
+                    e.payload.get("content", "") for e in self.events if e.type == "agent"
                 ).lower()
 
                 for pattern in patterns:

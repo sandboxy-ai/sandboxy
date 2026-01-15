@@ -193,8 +193,7 @@ class SessionManager:
             raise ValueError(f"Session not found: {session_id}")
 
         logger.info(
-            "Injecting event %s into session %s via tool %s",
-            event_type, session_id, tool_name
+            "Injecting event %s into session %s via tool %s", event_type, session_id, tool_name
         )
         return session.runner.inject_event(tool_name, event_type, args)
 

@@ -1,6 +1,5 @@
 """Tests for tool base module."""
 
-
 from sandboxy.tools.base import BaseTool, ToolConfig, ToolResult
 from tests.factories import ToolConfigFactory, ToolResultFactory
 

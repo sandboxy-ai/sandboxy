@@ -411,7 +411,9 @@ class TestInterpolateTemplate:
 
     def test_if_else_if_block(self) -> None:
         """Test if-else-if-else chain."""
-        template = """{{#if level == 'high'}}High{{else if level == 'medium'}}Medium{{else}}Low{{/if}}"""
+        template = (
+            """{{#if level == 'high'}}High{{else if level == 'medium'}}Medium{{else}}Low{{/if}}"""
+        )
 
         assert interpolate_template(template, {"level": "high"}) == "High"
         assert interpolate_template(template, {"level": "medium"}) == "Medium"

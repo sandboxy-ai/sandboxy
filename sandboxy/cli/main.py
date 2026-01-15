@@ -255,6 +255,7 @@ def bench(
 
         # Group by agent
         from collections import defaultdict
+
         by_agent: dict[str, list[dict[str, str | float | int]]] = defaultdict(list)
         for r in results:
             by_agent[str(r["agent_id"])].append(r)
@@ -267,7 +268,8 @@ def bench(
             click.echo(f"  Avg Score: {avg_score:.3f}")
             if "final_cash" in runs[0]:
                 cash_values = [
-                    float(r["final_cash"]) for r in runs
+                    float(r["final_cash"])
+                    for r in runs
                     if "final_cash" in r and isinstance(r["final_cash"], int | float)
                 ]
                 avg_cash = sum(cash_values) / len(cash_values) if cash_values else 0.0
@@ -312,6 +314,7 @@ def open(port: int, host: str, no_browser: bool) -> None:
     click.echo("")
 
     if not no_browser:
+
         def open_browser() -> None:
             time.sleep(1.5)
             webbrowser.open(url)
@@ -381,7 +384,12 @@ def info(module_path: str) -> None:
 
 @main.command()
 @click.argument("scenario_path", type=click.Path(exists=True))
-@click.option("--model", "-m", help="Model to use (e.g., openai/gpt-4o, anthropic/claude-3.5-sonnet)", default=None)
+@click.option(
+    "--model",
+    "-m",
+    help="Model to use (e.g., openai/gpt-4o, anthropic/claude-3.5-sonnet)",
+    default=None,
+)
 @click.option("--agent-id", "-a", help="Agent ID from config files", default=None)
 @click.option("--output", "-o", help="Output file for results JSON", default=None)
 @click.option("--pretty", "-p", is_flag=True, help="Pretty print output")
@@ -469,7 +477,9 @@ def scenario(
             click.echo("  sandboxy scenario <file> -m anthropic/claude-3.5-sonnet", err=True)
             click.echo("  sandboxy scenario <file> -m google/gemini-2.0-flash-exp:free", err=True)
             click.echo("", err=True)
-            click.echo("Or set OPENROUTER_API_KEY and use any model from openrouter.ai/models", err=True)
+            click.echo(
+                "Or set OPENROUTER_API_KEY and use any model from openrouter.ai/models", err=True
+            )
             sys.exit(1)
 
     # Apply scenario's system prompt to agent
@@ -652,22 +662,28 @@ def _fetch_and_display_models(free_only: bool, search: str | None) -> None:
             if search_lower not in model_id.lower() and search_lower not in name.lower():
                 continue
 
-        filtered.append({
-            "id": model_id,
-            "name": name,
-            "price": "Free" if is_free else f"${prompt_price:.2f}/M",
-            "context": m.get("context_length", 0),
-        })
+        filtered.append(
+            {
+                "id": model_id,
+                "name": name,
+                "price": "Free" if is_free else f"${prompt_price:.2f}/M",
+                "context": m.get("context_length", 0),
+            }
+        )
 
     # Sort by price (free first, then by cost)
-    filtered.sort(key=lambda x: (0 if x["price"] == "Free" else float(x["price"].replace("$", "").replace("/M", ""))))
+    filtered.sort(
+        key=lambda x: (
+            0 if x["price"] == "Free" else float(x["price"].replace("$", "").replace("/M", ""))
+        )
+    )
 
     click.echo(f"Models from OpenRouter ({len(filtered)} found):")
     click.echo("")
 
     for m in filtered[:50]:  # Limit output
         click.echo(f"  {m['id']}")
-        ctx = f"{m['context']//1000}k" if m["context"] >= 1000 else str(m["context"])
+        ctx = f"{m['context'] // 1000}k" if m["context"] >= 1000 else str(m["context"])
         click.echo(f"    {m['name']} [{m['price']}] [ctx: {ctx}]")
 
     if len(filtered) > 50:
@@ -991,9 +1007,16 @@ def mcp() -> None:
 @click.argument("target", required=False)
 @click.option("--url", "-u", help="URL of remote MCP server (HTTP transport)")
 @click.option("--args", "-a", "cmd_args", multiple=True, help="Arguments for local server command")
-@click.option("--header", "-H", "headers", multiple=True, help="HTTP headers (key:value) for remote servers")
-@click.option("--transport", "-t", type=click.Choice(["auto", "sse", "streamable_http"]), default="auto",
-              help="HTTP transport type (default: auto-detect)")
+@click.option(
+    "--header", "-H", "headers", multiple=True, help="HTTP headers (key:value) for remote servers"
+)
+@click.option(
+    "--transport",
+    "-t",
+    type=click.Choice(["auto", "sse", "streamable_http"]),
+    default="auto",
+    help="HTTP transport type (default: auto-detect)",
+)
 def mcp_inspect(
     target: str | None,
     url: str | None,
@@ -1015,7 +1038,10 @@ def mcp_inspect(
     import shlex
 
     if not target and not url:
-        click.echo("Error: Provide either a command (for local servers) or --url (for remote servers)", err=True)
+        click.echo(
+            "Error: Provide either a command (for local servers) or --url (for remote servers)",
+            err=True,
+        )
         sys.exit(1)
 
     # Parse headers into dict
@@ -1027,10 +1053,12 @@ def mcp_inspect(
 
     async def _inspect_local(command: str, args: list[str]) -> list[dict[str, Any]]:
         from sandboxy.mcp.client import inspect_mcp_server
+
         return await inspect_mcp_server(command, args)
 
     async def _inspect_remote(url: str) -> list[dict[str, Any]]:
         from sandboxy.mcp.client import inspect_mcp_server_http
+
         return await inspect_mcp_server_http(url, headers_dict if headers_dict else None, transport)  # type: ignore[arg-type]
 
     async def _inspect() -> None:
@@ -1117,12 +1145,36 @@ def mcp_list_servers() -> None:
     Shows a curated list of popular MCP servers that can be used with sandboxy.
     """
     servers = [
-        ("@modelcontextprotocol/server-filesystem", "File system access", "npx -y @modelcontextprotocol/server-filesystem <path>"),
-        ("@modelcontextprotocol/server-github", "GitHub API access", "npx -y @modelcontextprotocol/server-github"),
-        ("@modelcontextprotocol/server-postgres", "PostgreSQL database", "npx -y @modelcontextprotocol/server-postgres <connection-string>"),
-        ("@modelcontextprotocol/server-sqlite", "SQLite database", "npx -y @modelcontextprotocol/server-sqlite <db-path>"),
-        ("@modelcontextprotocol/server-brave-search", "Brave Search API", "npx -y @modelcontextprotocol/server-brave-search"),
-        ("@modelcontextprotocol/server-puppeteer", "Browser automation", "npx -y @modelcontextprotocol/server-puppeteer"),
+        (
+            "@modelcontextprotocol/server-filesystem",
+            "File system access",
+            "npx -y @modelcontextprotocol/server-filesystem <path>",
+        ),
+        (
+            "@modelcontextprotocol/server-github",
+            "GitHub API access",
+            "npx -y @modelcontextprotocol/server-github",
+        ),
+        (
+            "@modelcontextprotocol/server-postgres",
+            "PostgreSQL database",
+            "npx -y @modelcontextprotocol/server-postgres <connection-string>",
+        ),
+        (
+            "@modelcontextprotocol/server-sqlite",
+            "SQLite database",
+            "npx -y @modelcontextprotocol/server-sqlite <db-path>",
+        ),
+        (
+            "@modelcontextprotocol/server-brave-search",
+            "Brave Search API",
+            "npx -y @modelcontextprotocol/server-brave-search",
+        ),
+        (
+            "@modelcontextprotocol/server-puppeteer",
+            "Browser automation",
+            "npx -y @modelcontextprotocol/server-puppeteer",
+        ),
     ]
 
     click.echo("Popular MCP Servers:")

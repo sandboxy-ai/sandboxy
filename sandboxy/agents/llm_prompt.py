@@ -119,60 +119,68 @@ class LlmPromptAgent(BaseAgent):
         messages: list[dict[str, Any]] = []
 
         if self.config.system_prompt:
-            messages.append({
-                "role": "system",
-                "content": self.config.system_prompt,
-            })
+            messages.append(
+                {
+                    "role": "system",
+                    "content": self.config.system_prompt,
+                }
+            )
 
         for msg in history:
             if msg.role == "tool":
-                messages.append({
-                    "role": "tool",
-                    "content": msg.content,
-                    "tool_call_id": msg.tool_call_id or msg.tool_name or "unknown",
-                })
+                messages.append(
+                    {
+                        "role": "tool",
+                        "content": msg.content,
+                        "tool_call_id": msg.tool_call_id or msg.tool_name or "unknown",
+                    }
+                )
             elif msg.role == "assistant" and msg.tool_calls:
-                messages.append({
-                    "role": "assistant",
-                    "content": msg.content or None,
-                    "tool_calls": [
-                        {
-                            "id": tc.id,
-                            "type": "function",
-                            "function": {
-                                "name": tc.name,
-                                "arguments": tc.arguments,
-                            },
-                        }
-                        for tc in msg.tool_calls
-                    ],
-                })
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": msg.content or None,
+                        "tool_calls": [
+                            {
+                                "id": tc.id,
+                                "type": "function",
+                                "function": {
+                                    "name": tc.name,
+                                    "arguments": tc.arguments,
+                                },
+                            }
+                            for tc in msg.tool_calls
+                        ],
+                    }
+                )
             else:
-                messages.append({
-                    "role": msg.role,
-                    "content": msg.content,
-                })
+                messages.append(
+                    {
+                        "role": msg.role,
+                        "content": msg.content,
+                    }
+                )
 
         return messages
 
-    def _build_tools(
-        self, available_tools: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    def _build_tools(self, available_tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Build OpenAI tools format from available tools."""
         tools = []
         for tool in available_tools:
             actions = tool.get("actions", [])
             for action in actions:
-                tools.append({
-                    "type": "function",
-                    "function": {
-                        "name": f"{tool['name']}__{action['name']}",
-                        "description": action.get("description", ""),
-                        "parameters": action.get(
-                            "parameters", {"type": "object", "properties": {}}
-                        ),
-                    },
-                })
+                tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": f"{tool['name']}__{action['name']}",
+                            "description": action.get("description", ""),
+                            "parameters": action.get(
+                                "parameters", {"type": "object", "properties": {}}
+                            ),
+                        },
+                    }
+                )
         return tools
 
     def _call_api(

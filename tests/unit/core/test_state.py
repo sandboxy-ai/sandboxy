@@ -1,6 +1,5 @@
 """Tests for core state models."""
 
-
 from sandboxy.core.state import (
     EnvConfig,
     EvaluationCheck,
@@ -23,7 +22,15 @@ class TestSessionState:
 
     def test_all_states_defined(self) -> None:
         """Test that all expected states are defined."""
-        expected = ["IDLE", "RUNNING", "AWAITING_USER", "AWAITING_AGENT", "PAUSED", "COMPLETED", "ERROR"]
+        expected = [
+            "IDLE",
+            "RUNNING",
+            "AWAITING_USER",
+            "AWAITING_AGENT",
+            "PAUSED",
+            "COMPLETED",
+            "ERROR",
+        ]
         for state in expected:
             assert hasattr(SessionState, state)
 

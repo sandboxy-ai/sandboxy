@@ -49,7 +49,6 @@ dev = [
     "pytest-timeout>=2.2.0",
     "pytest-mock>=3.12.0",
     "respx>=0.21.0",
-    "pyright>=1.1",
     "ruff>=0.1",
 ]
 
@@ -125,12 +124,6 @@ ignore = [
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
-[tool.pyright]
-pythonVersion = "3.12"
-typeCheckingMode = "basic"
-reportMissingImports = true
-reportMissingTypeStubs = false
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
@@ -173,6 +166,5 @@ dev = [
     "pytest-timeout>=2.2.0",
     "pytest-mock>=3.12.0",
     "respx>=0.21.0",
-    "pyright>=1.1",
     "ruff>=0.1",
 ]
