@@ -5,10 +5,14 @@ dev:
 	@echo "Starting Sandboxy local server..."
 	uv run sandboxy open
 
-# Run the local UI dev server (for UI development)
+# Run the local UI dev server (for UI development with hot reload)
+# Use with: sandboxy open (in another terminal) + open http://localhost:5174
 local-ui-dev:
-	@echo "Starting local UI dev server on http://localhost:5174"
-	cd local-ui && npm run dev
+	@echo "Starting local UI dev server with hot reload..."
+	@echo "1. Run 'sandboxy open' in another terminal (API backend)"
+	@echo "2. Open http://localhost:5174 in your browser (hot-reload UI)"
+	@echo ""
+	cd local-ui && npm install && npm run dev
 
 # Install all dependencies
 install:

@@ -81,7 +81,7 @@ export function ModelSelector({ models, value, onChange, disabled, placeholder =
       </button>
 
       {open && (
-        <div className="absolute z-50 w-full mt-1 panel-card border border-slate-700/80 shadow-xl max-h-80 overflow-hidden flex flex-col">
+        <div className="absolute z-50 w-full mt-1 panel-card border border-slate-700/80 dark:border-slate-700/80 shadow-xl max-h-[28rem] overflow-hidden flex flex-col">
           {/* Search */}
           <div className="p-2 border-b border-slate-800/70">
             <div className="relative">
@@ -248,7 +248,7 @@ export function MultiModelSelector({ models, selected, onChange, disabled }: Mul
       </button>
 
       {open && (
-        <div className="absolute z-50 w-full mt-1 panel-card border border-slate-700/80 shadow-xl max-h-80 overflow-hidden flex flex-col">
+        <div className="absolute z-50 w-full mt-1 panel-card border border-slate-700/80 dark:border-slate-700/80 shadow-xl max-h-[28rem] overflow-hidden flex flex-col">
           {/* Search */}
           <div className="p-2 border-b border-slate-800/70">
             <div className="relative">
