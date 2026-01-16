@@ -826,11 +826,6 @@ async def save_tool(request: SaveToolRequest) -> SaveToolResponse:
         filepath = ctx.tools_dir / f"{request.name}.yml"
         filepath.write_text(request.content)
 
-    # Clear tool cache so new tools are discovered
-    from sandboxy.tools.loader import discover_python_tools
-
-    discover_python_tools(refresh=True)
-
     return SaveToolResponse(
         name=request.name,
         path=str(filepath),
