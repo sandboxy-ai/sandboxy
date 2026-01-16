@@ -325,6 +325,52 @@ def open(port: int, host: str, no_browser: bool) -> None:
 
 
 @main.command()
+@click.option("--port", "-p", type=int, default=8000, help="Port to run server on")
+@click.option("--host", default="127.0.0.1", help="Host to bind to")
+@click.option(
+    "--dir",
+    "-d",
+    "directory",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Working directory (default: current directory)",
+)
+def serve(port: int, host: str, directory: Path | None) -> None:
+    """Serve the Sandboxy API (backend only, no UI).
+
+    Useful for running the API server while developing the frontend separately,
+    or for headless/API-only deployments.
+
+    Examples:
+        sandboxy serve
+        sandboxy serve --port 3001
+        sandboxy serve --dir /path/to/project
+        sandboxy serve --host 0.0.0.0  # Allow external connections
+    """
+    import uvicorn
+
+    from sandboxy.api.app import create_local_app
+
+    root_dir = directory or Path.cwd()
+
+    # No UI - backend API only
+    app = create_local_app(root_dir, local_ui_path=None)
+
+    url = f"http://{host}:{port}"
+    click.echo(f"Starting Sandboxy API at {url}")
+    click.echo(f"Working directory: {root_dir}")
+    click.echo("")
+    click.echo("API endpoints:")
+    click.echo(f"  {url}/api/local/status")
+    click.echo(f"  {url}/api/local/scenarios")
+    click.echo(f"  {url}/api/local/tools")
+    click.echo(f"  {url}/docs  (OpenAPI docs)")
+    click.echo("")
+
+    uvicorn.run(app, host=host, port=port, log_level="info")
+
+
+@main.command()
 def list_agents() -> None:
     """List available agents."""
     loader = AgentLoader(DEFAULT_AGENT_DIRS)

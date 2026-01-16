@@ -2,6 +2,9 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
+// Backend API URL - override with VITE_API_URL env var
+const apiUrl = process.env.VITE_API_URL || 'http://127.0.0.1:8000'
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -16,9 +19,9 @@ export default defineConfig({
   server: {
     port: 5174,
     proxy: {
-      '/api': 'http://127.0.0.1:8000',
+      '/api': apiUrl,
       '/ws': {
-        target: 'http://127.0.0.1:8000',
+        target: apiUrl,
         ws: true,
       },
     },
