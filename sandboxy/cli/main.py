@@ -56,7 +56,7 @@ def completion(shell: str) -> None:
     env = os.environ.copy()
     env["_SANDBOXY_COMPLETE"] = f"{shell}_source"
 
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: S603
         [sys.executable, "-m", "sandboxy.cli.main"],
         env=env,
         capture_output=True,
