@@ -1,6 +1,5 @@
 """CLI entrypoint for Sandboxy."""
 
-import csv
 import json
 import os
 import sys
@@ -35,6 +34,59 @@ def main() -> None:
     pass
 
 
+@main.command()
+@click.argument("shell", type=click.Choice(["bash", "zsh", "fish"]), default="bash")
+def completion(shell: str) -> None:
+    """Generate shell completion and show setup instructions.
+
+    Writes completion script to ~/.sandboxy-completion.<shell>
+    and shows the line to add to your shell config.
+
+    Examples:
+        sandboxy completion         # Generate bash completion
+        sandboxy completion zsh     # Generate zsh completion
+    """
+    import subprocess
+
+    home = Path.home()
+    ext = shell if shell != "bash" else "bash"
+    completion_file = home / f".sandboxy-completion.{ext}"
+
+    # Generate completion script using Click's built-in mechanism
+    env = os.environ.copy()
+    env["_SANDBOXY_COMPLETE"] = f"{shell}_source"
+
+    result = subprocess.run(
+        [sys.executable, "-m", "sandboxy.cli.main"],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    # Write to file
+    completion_file.write_text(result.stdout)
+    click.echo(f"Generated: {completion_file}")
+    click.echo("")
+    click.echo("Add this line to your shell config:")
+    click.echo("")
+
+    if shell == "bash":
+        click.echo("# Sandboxy completion")
+        click.echo(f'. "{completion_file}"')
+        click.echo("")
+        click.echo("(Add to ~/.bashrc)")
+    elif shell == "zsh":
+        click.echo("# Sandboxy completion")
+        click.echo(f'. "{completion_file}"')
+        click.echo("")
+        click.echo("(Add to ~/.zshrc)")
+    elif shell == "fish":
+        click.echo("# Sandboxy completion")
+        click.echo(f'source "{completion_file}"')
+        click.echo("")
+        click.echo("(Add to ~/.config/fish/config.fish)")
+
+
 def _load_variables_from_env() -> dict:
     """Load variables from SANDBOXY_VARIABLES environment variable."""
     env_vars = os.environ.get("SANDBOXY_VARIABLES", "")
@@ -44,6 +96,191 @@ def _load_variables_from_env() -> dict:
         return json.loads(env_vars)
     except json.JSONDecodeError:
         return {}
+
+
+@main.command()
+@click.option("--with-examples", is_flag=True, help="Include example scenarios and tools")
+@click.option(
+    "--dir",
+    "-d",
+    "directory",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Directory to initialize (default: current directory)",
+)
+def init(with_examples: bool, directory: Path | None) -> None:
+    """Initialize a new Sandboxy project.
+
+    Creates the standard folder structure for scenarios, tools, agents, and datasets.
+
+    Examples:
+        sandboxy init
+        sandboxy init --with-examples
+        sandboxy init --dir my-project
+    """
+    root = directory or Path.cwd()
+
+    # Create directory if specified and doesn't exist
+    if directory and not root.exists():
+        root.mkdir(parents=True)
+        click.echo(f"Created directory: {root}")
+
+    # Standard folders
+    folders = ["scenarios", "tools", "agents", "datasets", "runs"]
+    created = []
+
+    for folder in folders:
+        folder_path = root / folder
+        if not folder_path.exists():
+            folder_path.mkdir(parents=True)
+            created.append(folder)
+
+    if created:
+        click.echo(f"Created folders: {', '.join(created)}")
+    else:
+        click.echo("All folders already exist")
+
+    # Create .env.example if it doesn't exist
+    env_example = root / ".env.example"
+    if not env_example.exists():
+        env_example.write_text(
+            """# Sandboxy Environment Variables
+# Copy this to .env and fill in your API keys
+
+# OpenRouter API key (recommended - access to 400+ models)
+OPENROUTER_API_KEY=
+
+# Or use direct provider keys
+OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+"""
+        )
+        click.echo("Created .env.example")
+
+    # Create .gitignore if it doesn't exist
+    gitignore = root / ".gitignore"
+    if not gitignore.exists():
+        gitignore.write_text(
+            """.env
+runs/
+__pycache__/
+*.pyc
+"""
+        )
+        click.echo("Created .gitignore")
+
+    # Add examples if requested
+    if with_examples:
+        _create_example_files(root)
+
+    click.echo("")
+    click.echo("Project initialized! Next steps:")
+    click.echo("  1. Copy .env.example to .env and add your API key")
+    click.echo("  2. Create scenarios in scenarios/")
+    click.echo("  3. Run: sandboxy open")
+
+
+def _create_example_files(root: Path) -> None:
+    """Create example scenario and tool files."""
+    # Example scenario
+    example_scenario = root / "scenarios" / "hello-world.yml"
+    if not example_scenario.exists():
+        example_scenario.write_text(
+            """name: Hello World
+description: A simple greeting scenario to test your setup
+
+system_prompt: |
+  You are a friendly assistant. Greet the user warmly.
+
+prompt: |
+  Hello! Can you introduce yourself?
+
+evaluation:
+  goals:
+    - id: greeted
+      name: Greeted the user
+      description: The assistant should greet the user
+      outcome: true
+      check: "'hello' in response.lower() or 'hi' in response.lower()"
+"""
+        )
+        click.echo("Created scenarios/hello-world.yml")
+
+    # Example tool
+    example_tool = root / "tools" / "calculator.yml"
+    if not example_tool.exists():
+        example_tool.write_text(
+            """name: calculator
+description: A simple calculator tool
+
+tools:
+  calculator:
+    description: Perform basic math operations
+    actions:
+      add:
+        description: Add two numbers
+        parameters:
+          type: object
+          properties:
+            a:
+              type: number
+              description: First number
+            b:
+              type: number
+              description: Second number
+          required: [a, b]
+        returns:
+          result: "{{a}} + {{b}}"
+
+      multiply:
+        description: Multiply two numbers
+        parameters:
+          type: object
+          properties:
+            a:
+              type: number
+            b:
+              type: number
+          required: [a, b]
+        returns:
+          result: "{{a}} * {{b}}"
+"""
+        )
+        click.echo("Created tools/calculator.yml")
+
+    # Example scenario using the tool
+    tool_scenario = root / "scenarios" / "calculator-test.yml"
+    if not tool_scenario.exists():
+        tool_scenario.write_text(
+            """name: Calculator Test
+description: Test the calculator tool
+
+system_prompt: |
+  You are a helpful assistant with access to a calculator.
+  Use the calculator tool to perform math operations.
+
+tools_from:
+  - calculator
+
+prompt: |
+  What is 42 + 17?
+
+evaluation:
+  goals:
+    - id: used_calculator
+      name: Used calculator
+      description: The agent should use the calculator tool
+      outcome: true
+      check: "any(tc.tool == 'calculator' for tc in tool_calls)"
+
+    - id: correct_answer
+      name: Correct answer
+      description: The response should contain 59
+      outcome: true
+      check: "'59' in response"
+"""
+        )
+        click.echo("Created scenarios/calculator-test.yml")
 
 
 @main.command()
@@ -133,148 +370,6 @@ def validate(module_path: str) -> None:
         sys.exit(1)
 
     click.echo("Module is valid.")
-
-
-@main.command()
-@click.argument("module_path", type=click.Path(exists=True))
-@click.option("--agents", required=True, help="Comma-separated agent IDs")
-@click.option("--runs-per-agent", type=int, default=1, help="Number of runs per agent")
-@click.option("--output", "-o", type=click.Path(), default=None, help="Output CSV file")
-@click.option("--var", "-v", multiple=True, help="Variable in name=value format")
-@click.option("--seed", type=int, default=None, help="Random seed for reproducibility")
-def bench(
-    module_path: str,
-    agents: str,
-    runs_per_agent: int,
-    output: str | None,
-    var: tuple[str, ...],
-    seed: int | None,
-) -> None:
-    """Benchmark a module against multiple agents.
-
-    MODULE_PATH is the path to an MDL YAML file.
-
-    Examples:
-        sandboxy bench modules/lemonade.yml --agents gpt4,claude --runs 5
-        sandboxy bench modules/lemonade.yml --agents gpt4 -v difficulty=8 -v starting_cash=100
-    """
-    import random
-
-    # Set random seed for reproducibility
-    if seed is not None:
-        random.seed(seed)
-
-    try:
-        module = load_module(Path(module_path))
-    except MDLParseError as e:
-        click.echo(f"Error loading module: {e}", err=True)
-        sys.exit(1)
-
-    # Load variables from environment and CLI
-    variables = _load_variables_from_env()
-    for v in var:
-        if "=" in v:
-            name, value = v.split("=", 1)
-            try:
-                variables[name] = json.loads(value)
-            except json.JSONDecodeError:
-                variables[name] = value
-
-    # Apply variables to module
-    if variables:
-        module = apply_variables(module, variables)
-        click.echo(f"Variables: {variables}")
-
-    loader = AgentLoader(DEFAULT_AGENT_DIRS)
-    agent_ids = [a.strip() for a in agents.split(",")]
-
-    results: list[dict[str, str | float | int]] = []
-
-    for agent_id in agent_ids:
-        try:
-            agent = loader.load(agent_id)
-        except ValueError as e:
-            click.echo(f"Warning: Skipping agent {agent_id}: {e}", err=True)
-            continue
-
-        # Apply module's agent_config overrides
-        if module.agent_config:
-            if "system_prompt" in module.agent_config:
-                agent.config.system_prompt = module.agent_config["system_prompt"]
-
-        click.echo(f"Benchmarking agent: {agent_id}")
-
-        for run_idx in range(runs_per_agent):
-            runner = Runner(module=module, agent=agent)
-            result = runner.run()
-
-            row: dict[str, str | float | int] = {
-                "agent_id": agent_id,
-                "run_idx": run_idx,
-                "score": result.evaluation.score,
-                "num_events": result.evaluation.num_events,
-                "status": result.evaluation.status,
-            }
-
-            # Add seed if used for reproducibility tracking
-            if seed is not None:
-                row["seed"] = seed
-
-            # Add env_state metrics if available
-            if "cash_balance" in runner.env_state:
-                row["final_cash"] = runner.env_state["cash_balance"]
-            if "starting_cash" in module.environment.initial_state:
-                initial = module.environment.initial_state["starting_cash"]
-                if "final_cash" in row:
-                    row["profit"] = float(row["final_cash"]) - float(initial)
-
-            # Add all evaluation check results
-            for check_name, check_result in result.evaluation.checks.items():
-                if isinstance(check_result, int | float | bool):
-                    row[f"check_{check_name}"] = check_result
-
-            results.append(row)
-            click.echo(f"  Run {run_idx + 1}: score={result.evaluation.score:.2f}")
-
-    if not results:
-        click.echo("No results to report.", err=True)
-        sys.exit(1)
-
-    # Output results
-    if output:
-        fieldnames = list(results[0].keys())
-        with open(output, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(results)
-        click.echo(f"\nResults saved to: {output}")
-    else:
-        # Print summary table
-        click.echo("\nBenchmark Results:")
-        click.echo("-" * 60)
-
-        # Group by agent
-        from collections import defaultdict
-
-        by_agent: dict[str, list[dict[str, str | float | int]]] = defaultdict(list)
-        for r in results:
-            by_agent[str(r["agent_id"])].append(r)
-
-        for agent_id, runs in by_agent.items():
-            scores = [r["score"] for r in runs if isinstance(r["score"], int | float)]
-            avg_score = sum(scores) / len(scores) if scores else 0
-            click.echo(f"{agent_id}:")
-            click.echo(f"  Runs: {len(runs)}")
-            click.echo(f"  Avg Score: {avg_score:.3f}")
-            if "final_cash" in runs[0]:
-                cash_values = [
-                    float(r["final_cash"])
-                    for r in runs
-                    if "final_cash" in r and isinstance(r["final_cash"], int | float)
-                ]
-                avg_cash = sum(cash_values) / len(cash_values) if cash_values else 0.0
-                click.echo(f"  Avg Final Cash: {avg_cash:.2f}")
-            click.echo("")
 
 
 @main.command()
