@@ -1489,20 +1489,24 @@ async def run_with_dataset(request: RunDatasetRequest) -> RunDatasetResponse:
                     try:
                         import mlflow
 
-                        mlflow.log_params({
-                            "scenario_id": result.scenario_id,
-                            "dataset_id": result.dataset_id,
-                            "model": result.model,
-                            "total_cases": result.total_cases,
-                        })
-                        mlflow.log_metrics({
-                            "passed_cases": result.passed_cases,
-                            "failed_cases": result.failed_cases,
-                            "pass_rate": result.pass_rate,
-                            "avg_score": result.avg_score,
-                            "avg_percentage": result.avg_percentage,
-                            "total_time_ms": result.total_time_ms,
-                        })
+                        mlflow.log_params(
+                            {
+                                "scenario_id": result.scenario_id,
+                                "dataset_id": result.dataset_id,
+                                "model": result.model,
+                                "total_cases": result.total_cases,
+                            }
+                        )
+                        mlflow.log_metrics(
+                            {
+                                "passed_cases": result.passed_cases,
+                                "failed_cases": result.failed_cases,
+                                "pass_rate": result.pass_rate,
+                                "avg_score": result.avg_score,
+                                "avg_percentage": result.avg_percentage,
+                                "total_time_ms": result.total_time_ms,
+                            }
+                        )
                         # Log per-expected-outcome metrics
                         for expected, counts in result.by_expected.items():
                             total = counts.get("passed", 0) + counts.get("failed", 0)
