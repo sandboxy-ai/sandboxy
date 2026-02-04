@@ -98,6 +98,137 @@ def _load_variables_from_env() -> dict:
         return {}
 
 
+def _export_to_mlflow(
+    result: Any,
+    spec: Any,
+    scenario_path: Path,
+    mlflow_export: bool,
+    no_mlflow: bool,
+    mlflow_tracking_uri: str | None,
+    mlflow_experiment: str | None,
+    agent_name: str = "default",
+) -> None:
+    """Export scenario result to MLflow if enabled.
+
+    Args:
+        result: ScenarioResult from runner
+        spec: ScenarioSpec
+        scenario_path: Path to scenario file
+        mlflow_export: --mlflow-export flag
+        no_mlflow: --no-mlflow flag
+        mlflow_tracking_uri: --mlflow-tracking-uri value
+        mlflow_experiment: --mlflow-experiment value
+        agent_name: Agent configuration name
+    """
+    from sandboxy.mlflow.config import MLflowConfig
+
+    # Get YAML config from spec
+    yaml_config = None
+    if spec.mlflow:
+        yaml_config = {
+            "enabled": spec.mlflow.enabled,
+            "experiment": spec.mlflow.experiment,
+            "tracking_uri": spec.mlflow.tracking_uri,
+            "tags": spec.mlflow.tags,
+        }
+
+    # Resolve config with precedence
+    config = MLflowConfig.resolve(
+        cli_export=mlflow_export,
+        cli_no_mlflow=no_mlflow,
+        cli_tracking_uri=mlflow_tracking_uri,
+        cli_experiment=mlflow_experiment,
+        yaml_config=yaml_config,
+        scenario_name=spec.name,
+    )
+
+    if not config.enabled:
+        return
+
+    # Import and use exporter
+    try:
+        from sandboxy.mlflow.exporter import MLflowExporter
+
+        exporter = MLflowExporter(config)
+
+        # Convert ScenarioResult to RunResult-like for exporter
+        # ScenarioResult has different structure, create adapter
+        run_id = exporter.export(
+            result=_adapt_scenario_result(result),
+            scenario_path=scenario_path,
+            scenario_name=spec.name,
+            scenario_id=spec.id,
+            agent_name=agent_name,
+        )
+
+        if run_id:
+            click.echo(f"\nExported to MLflow: run_id={run_id}")
+
+    except ImportError:
+        click.echo(
+            "\nMLflow not installed. Install with: pip install sandboxy[mlflow]",
+            err=True,
+        )
+    except Exception as e:
+        click.echo(f"\nWarning: MLflow export failed: {e}", err=True)
+
+
+def _adapt_scenario_result(result: Any) -> Any:
+    """Adapt ScenarioResult to RunResult-like interface for MLflowExporter.
+
+    The exporter expects RunResult fields, but ScenarioRunner returns ScenarioResult.
+    This creates an adapter object.
+    """
+    from dataclasses import dataclass, field
+
+    @dataclass
+    class GoalResultAdapter:
+        name: str
+        score: float
+        passed: bool = True
+
+    @dataclass
+    class EvaluationAdapter:
+        goals: list[GoalResultAdapter] = field(default_factory=list)
+        total_score: float = 0.0
+        max_score: float = 0.0
+        percentage: float = 0.0
+
+    @dataclass
+    class RunResultAdapter:
+        model: str = ""
+        error: str | None = None
+        latency_ms: int = 0
+        input_tokens: int = 0
+        output_tokens: int = 0
+        evaluation: EvaluationAdapter | None = None
+
+    # Extract data from ScenarioResult
+    adapter = RunResultAdapter(
+        model=getattr(result, "agent_id", "unknown"),
+        error=None,
+    )
+
+    # Build evaluation from goals
+    goals = []
+    total = 0.0
+    for goal_name in getattr(result, "goals_achieved", []):
+        goals.append(GoalResultAdapter(name=goal_name, score=1.0, passed=True))
+        total += 1.0
+
+    score = getattr(result, "score", 0.0)
+    max_score = max(score, len(goals)) if goals else score
+
+    adapter.evaluation = EvaluationAdapter(
+        goals=goals,
+        total_score=score,
+        max_score=max_score,
+        percentage=(score / max_score * 100) if max_score > 0 else 0.0,
+    )
+
+    return adapter
+
+
 @main.command()
 @click.option("--with-examples", is_flag=True, help="Include example scenarios and tools")
 @click.option(
@@ -528,22 +659,54 @@ def info(module_path: str) -> None:
 @click.option(
     "--model",
     "-m",
-    help="Model to use (e.g., openai/gpt-4o, anthropic/claude-3.5-sonnet)",
-    default=None,
+    multiple=True,
+    help="Model(s) to use. Can specify multiple: -m gpt-4o -m claude-3.5-sonnet",
 )
 @click.option("--agent-id", "-a", help="Agent ID from config files", default=None)
 @click.option("--output", "-o", help="Output file for results JSON", default=None)
 @click.option("--pretty", "-p", is_flag=True, help="Pretty print output")
 @click.option("--max-turns", type=int, default=20, help="Maximum conversation turns")
 @click.option("--var", "-v", multiple=True, help="Variable in name=value format")
+@click.option(
+    "--mlflow-export",
+    is_flag=True,
+    help="Export run results to MLflow tracking server",
+)
+@click.option(
+    "--no-mlflow",
+    is_flag=True,
+    help="Disable MLflow export (overrides YAML config)",
+)
+@click.option(
+    "--mlflow-tracking-uri",
+    type=str,
+    default=None,
+    help="MLflow tracking server URI (overrides MLFLOW_TRACKING_URI env)",
+)
+@click.option(
+    "--mlflow-experiment",
+    type=str,
+    default=None,
+    help="MLflow experiment name (defaults to scenario name)",
+)
+@click.option(
+    "--mlflow-no-tracing",
+    is_flag=True,
+    help="Disable LLM call tracing (only log summary metrics)",
+)
 def scenario(
     scenario_path: str,
-    model: str | None,
+    model: tuple[str, ...],
     agent_id: str | None,
     output: str | None,
     pretty: bool,
     max_turns: int,
     var: tuple[str, ...],
+    mlflow_export: bool,
+    no_mlflow: bool,
+    mlflow_tracking_uri: str | None,
+    mlflow_experiment: str | None,
+    mlflow_no_tracing: bool,
 ) -> None:
     """Run a scenario with YAML-defined tools.
 
@@ -554,8 +717,10 @@ def scenario(
 
     Examples:
         sandboxy scenario scenarios/trolley.yml -m openai/gpt-4o
-        sandboxy scenario scenarios/trolley.yml -m anthropic/claude-3.5-sonnet -p
+        sandboxy scenario scenarios/trolley.yml -m gpt-4o -m claude-3.5-sonnet  # multiple models
         sandboxy scenario scenarios/surgeon.yml -v patient="John Smith" -v condition="critical"
+        sandboxy scenario scenarios/test.yml -m gpt-4o --mlflow-export
+        sandboxy scenario scenarios/test.yml -m gpt-4o -m gpt-4o-mini --mlflow-export  # compare models
     """
     from sandboxy.agents.base import AgentConfig
     from sandboxy.agents.llm_prompt import LlmPromptAgent
@@ -566,6 +731,26 @@ def scenario(
     except ValueError as e:
         click.echo(f"Error loading scenario: {e}", err=True)
         sys.exit(1)
+
+    # Build MLflow config if export requested
+    mlflow_config = None
+    if mlflow_export and not no_mlflow:
+        try:
+            from sandboxy.mlflow import MLflowConfig
+
+            mlflow_config = MLflowConfig.resolve(
+                cli_export=True,
+                cli_tracking_uri=mlflow_tracking_uri,
+                cli_experiment=mlflow_experiment,
+                cli_tracing=not mlflow_no_tracing,
+                yaml_config=spec.mlflow.model_dump() if spec.mlflow else None,
+                scenario_name=spec.name,
+            )
+            click.echo(f"MLflow enabled → experiment: {mlflow_config.experiment}")
+            if mlflow_config.tracing:
+                click.echo("  Tracing: ON (LLM calls will be captured)")
+        except ImportError:
+            pass  # MLflow not installed
 
     # Parse and apply variables
     variables: dict[str, Any] = {}
@@ -582,27 +767,17 @@ def scenario(
         spec = apply_scenario_variables(spec, variables)
         click.echo(f"Variables: {variables}")
 
-    # Determine which agent to use
-    agent = None
+    # Build list of models to run
+    models_to_run: list[str] = []
 
     if model:
-        # Create ad-hoc agent from model string
-        config = AgentConfig(
-            id=model,
-            name=model.split("/")[-1] if "/" in model else model,
-            kind="llm-prompt",
-            model=model,
-            system_prompt="",
-            tools=[],
-            params={"temperature": 0.7, "max_tokens": 4096},
-            impl={},
-        )
-        agent = LlmPromptAgent(config)
+        models_to_run = list(model)
     elif agent_id:
         # Load from agent config files
         loader = AgentLoader(DEFAULT_AGENT_DIRS)
         try:
             agent = loader.load(agent_id)
+            models_to_run = [agent.config.model]
         except ValueError as e:
             click.echo(f"Error loading agent: {e}", err=True)
             sys.exit(1)
@@ -611,6 +786,7 @@ def scenario(
         loader = AgentLoader(DEFAULT_AGENT_DIRS)
         try:
             agent = loader.load_default()
+            models_to_run = [agent.config.model]
         except ValueError:
             click.echo("No model specified. Use -m to specify a model:", err=True)
             click.echo("", err=True)
@@ -623,25 +799,110 @@ def scenario(
             )
             sys.exit(1)
 
-    # Apply scenario's system prompt to agent
-    if spec.system_prompt:
-        agent.config.system_prompt = spec.system_prompt
-
     click.echo(f"Running scenario: {spec.name}")
-    click.echo(f"Using model: {agent.config.model}")
+    click.echo(f"Models: {', '.join(models_to_run)}")
     click.echo(f"Tools loaded: {len(spec.tools) + len(spec.tools_from)} source(s)")
+    if len(models_to_run) > 1:
+        click.echo("Running models in parallel...")
     click.echo("")
 
-    runner = ScenarioRunner(scenario=spec, agent=agent)
-    result = runner.run(max_turns=max_turns)
+    def run_single_model(model_id: str) -> dict[str, Any]:
+        """Run scenario with a single model, with MLflow tracing if enabled."""
+        agent_config = AgentConfig(
+            id=model_id,
+            name=model_id.split("/")[-1] if "/" in model_id else model_id,
+            kind="llm-prompt",
+            model=model_id,
+            system_prompt=spec.system_prompt or "",
+            tools=[],
+            params={"temperature": 0.7, "max_tokens": 4096},
+            impl={},
+        )
+        agent = LlmPromptAgent(agent_config)
 
-    if output:
-        Path(output).write_text(result.to_json(indent=2))
-        click.echo(f"\nResults saved to: {output}")
-    elif pretty:
-        click.echo(result.pretty())
+        # If MLflow enabled, wrap execution in run context so traces are connected
+        if mlflow_config and mlflow_config.enabled:
+            from sandboxy.mlflow import MLflowExporter, mlflow_run_context
+            from sandboxy.mlflow.tracing import enable_tracing
+
+            # Enable tracing before the run starts
+            if mlflow_config.tracing:
+                enable_tracing(
+                    tracking_uri=mlflow_config.tracking_uri,
+                    experiment_name=mlflow_config.experiment,
+                )
+
+            # Start run, execute scenario, then log metrics - all connected
+            with mlflow_run_context(mlflow_config, run_name=model_id) as run_id:
+                runner = ScenarioRunner(scenario=spec, agent=agent)
+                result = runner.run(max_turns=max_turns)
+
+                # Log metrics to the active run (traces are already attached)
+                if run_id:
+                    exporter = MLflowExporter(mlflow_config)
+                    exporter.log_to_active_run(
+                        result=result,
+                        scenario_path=Path(scenario_path),
+                        scenario_name=spec.name,
+                        scenario_id=spec.id,
+                        agent_name=agent.config.name,
+                    )
+
+            return {"model": model_id, "result": result, "agent_name": agent.config.name}
+
+        # No MLflow - just run scenario
+        runner = ScenarioRunner(scenario=spec, agent=agent)
+        result = runner.run(max_turns=max_turns)
+        return {"model": model_id, "result": result, "agent_name": agent.config.name}
+
+    # Run models in parallel if multiple, otherwise just run single
+    results: list[Any] = []
+    if len(models_to_run) == 1:
+        results = [run_single_model(models_to_run[0])]
     else:
-        click.echo(result.to_json(indent=2))
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        with ThreadPoolExecutor(max_workers=len(models_to_run)) as executor:
+            futures = {executor.submit(run_single_model, m): m for m in models_to_run}
+            for future in as_completed(futures):
+                model_id = futures[future]
+                try:
+                    result_data = future.result()
+                    results.append(result_data)
+                    click.echo(f"✓ Completed: {model_id}")
+                except Exception as e:
+                    click.echo(f"✗ Failed: {model_id} - {e}", err=True)
+        click.echo("")
+
+    # Output results
+    if len(results) == 1:
+        result = results[0]["result"]
+        if output:
+            Path(output).write_text(result.to_json(indent=2))
+            click.echo(f"\nResults saved to: {output}")
+        elif pretty:
+            click.echo(result.pretty())
+        else:
+            click.echo(result.to_json(indent=2))
+    else:
+        # Multiple models - show summary
+        # Get max_score from spec (scoring config or sum of goal points)
+        max_score = spec.scoring.get("max_score", 0) if spec.scoring else 0
+        if not max_score and spec.goals:
+            max_score = sum(g.points for g in spec.goals)
+
+        click.echo("=== Results Summary ===")
+        for r in results:
+            model_name = r["model"]
+            res = r["result"]
+            score = getattr(res, "score", 0) or 0
+            pct = (score / max_score * 100) if max_score > 0 else 0
+            click.echo(f"  {model_name}: {score:.1f}/{max_score:.1f} ({pct:.0f}%)")
+
+        if output:
+            all_results = [{"model": r["model"], "result": r["result"].to_dict()} for r in results]
+            Path(output).write_text(json.dumps(all_results, indent=2))
+            click.echo(f"\nResults saved to: {output}")
 
 
 @main.command()

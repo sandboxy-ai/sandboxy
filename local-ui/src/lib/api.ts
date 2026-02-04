@@ -53,6 +53,10 @@ export interface RunScenarioRequest {
   max_turns?: number
   max_tokens?: number
   temperature?: number
+  mlflow_export?: boolean
+  mlflow_tracking_uri?: string
+  mlflow_experiment?: string
+  mlflow_tracing?: boolean
 }
 
 export interface HistoryMessage {
@@ -112,6 +116,10 @@ export interface CompareModelsRequest {
   runs_per_model?: number
   variables?: Record<string, unknown>
   max_turns?: number
+  mlflow_export?: boolean
+  mlflow_tracking_uri?: string
+  mlflow_experiment?: string
+  mlflow_tracing?: boolean
 }
 
 export interface ModelStats {
@@ -205,6 +213,8 @@ export interface RunDatasetRequest {
   max_tokens?: number
   temperature?: number
   parallel?: number
+  mlflow_enabled?: boolean
+  mlflow_experiment?: string
 }
 
 export interface CaseResultInfo {

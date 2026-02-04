@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
-import { ArrowLeft, Play, Loader2, XCircle, Edit, Settings, Database, Check, X } from 'lucide-react'
+import { ArrowLeft, Play, Loader2, XCircle, Edit, Settings, Database, Check, X, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react'
 import { api, ScenarioDetail, ModelInfo, VariableInfo, DatasetInfo, RunDatasetResponse, LocalFileInfo } from '../lib/api'
-import { useScenarioRun } from '../hooks/useScenarioRun'
+import { useScenarioRun, MlflowOptions } from '../hooks/useScenarioRun'
 import { SingleRunResult, ComparisonResult } from '../components/ResultDisplay'
 import { ModelSelector, MultiModelSelector } from '../components/ModelSelector'
 
@@ -32,6 +32,13 @@ export default function RunPage() {
   const [datasetResult, setDatasetResult] = useState<RunDatasetResponse | null>(null)
   const [datasetRunning, setDatasetRunning] = useState(false)
   const [parallel, setParallel] = useState(parallelFromUrl)
+
+  // MLflow state
+  const [mlflowEnabled, setMlflowEnabled] = useState(false)
+  const [mlflowExpanded, setMlflowExpanded] = useState(false)
+  const [mlflowTrackingUri, setMlflowTrackingUri] = useState('')
+  const [mlflowExperiment, setMlflowExperiment] = useState('')
+  const [mlflowTracing, setMlflowTracing] = useState(true)
 
   const { state, result, comparison, error: runError, runScenario, compareModels } = useScenarioRun()
 
@@ -93,6 +100,13 @@ export default function RunPage() {
     const sid = selectedScenarioId || scenarioId
     if (!sid) return
 
+    const mlflowOptions: MlflowOptions | undefined = mlflowEnabled ? {
+      enabled: true,
+      trackingUri: mlflowTrackingUri || undefined,
+      experiment: mlflowExperiment || undefined,
+      tracing: mlflowTracing,
+    } : undefined
+
     if (runMode === 'dataset') {
       if (!selectedDataset || !selectedModel) return
       setDatasetRunning(true)
@@ -103,6 +117,8 @@ export default function RunPage() {
           dataset_id: selectedDataset,
           model: selectedModel,
           parallel,
+          mlflow_enabled: mlflowEnabled,
+          mlflow_experiment: mlflowExperiment || undefined,
         })
         setDatasetResult(result)
       } catch (err) {
@@ -112,10 +128,10 @@ export default function RunPage() {
       }
     } else if (runMode === 'single') {
       if (!selectedModel) return
-      await runScenario(sid, selectedModel, variables)
+      await runScenario(sid, selectedModel, variables, mlflowOptions)
     } else {
       if (selectedModels.length === 0) return
-      await compareModels(sid, selectedModels, runsPerModel, variables)
+      await compareModels(sid, selectedModels, runsPerModel, variables, mlflowOptions)
     }
   }
 
@@ -359,6 +375,96 @@ export default function RunPage() {
             </div>
           </div>
         )}
+
+        {/* MLflow Section */}
+        <div className="mb-6 p-4 panel-subtle">
+          <button
+            onClick={() => setMlflowExpanded(!mlflowExpanded)}
+            className="flex items-center gap-2 w-full text-left"
+          >
+            {mlflowExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+            <span className="font-medium text-slate-100">MLflow Tracking</span>
+            {mlflowEnabled && (
+              <span className="ml-2 px-2 py-0.5 text-xs bg-green-500/20 text-green-400 rounded">
+                Enabled
+              </span>
+            )}
+          </button>
+
+          {mlflowExpanded && (
+            <div className="mt-4 space-y-4">
+              {/* Enable Toggle */}
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={mlflowEnabled}
+                  onChange={(e) => setMlflowEnabled(e.target.checked)}
+                  disabled={state === 'running' || datasetRunning}
+                  className="w-4 h-4 rounded border-slate-600 text-orange-400 focus:ring-orange-400"
+                />
+                <span className="text-slate-200">Enable MLflow tracking</span>
+              </label>
+
+              {mlflowEnabled && (
+                <>
+                  {/* Tracking URI - only for non-dataset runs (dataset uses env var) */}
+                  {runMode !== 'dataset' && (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-400 mb-1">
+                        Tracking URI
+                      </label>
+                      <input
+                        type="text"
+                        value={mlflowTrackingUri}
+                        onChange={(e) => setMlflowTrackingUri(e.target.value)}
+                        disabled={state === 'running'}
+                        placeholder="http://127.0.0.1:5000 (uses MLFLOW_TRACKING_URI if empty)"
+                        className="w-full panel-subtle px-3 py-2 text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                      />
+                    </div>
+                  )}
+
+                  {/* Experiment Name */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">
+                      Experiment Name
+                    </label>
+                    <input
+                      type="text"
+                      value={mlflowExperiment}
+                      onChange={(e) => setMlflowExperiment(e.target.value)}
+                      disabled={state === 'running' || datasetRunning}
+                      placeholder={runMode === 'dataset' ? `${scenario?.name || 'scenario'}-dataset` : (scenario?.name || 'Defaults to scenario name')}
+                      className="w-full panel-subtle px-3 py-2 text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    />
+                  </div>
+
+                  {/* Tracing Toggle - only for non-dataset runs */}
+                  {runMode !== 'dataset' && (
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={mlflowTracing}
+                        onChange={(e) => setMlflowTracing(e.target.checked)}
+                        disabled={state === 'running'}
+                        className="w-4 h-4 rounded border-slate-600 text-orange-400 focus:ring-orange-400"
+                      />
+                      <div>
+                        <span className="text-slate-200">Enable LLM Tracing</span>
+                        <p className="text-xs text-slate-500">Capture detailed traces of each LLM call</p>
+                      </div>
+                    </label>
+                  )}
+
+                  <p className="text-xs text-slate-500 flex items-center gap-1">
+                    <ExternalLink size={12} />
+                    View results at your MLflow server after the run completes
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+        </div>
 
         <button
           onClick={handleRun}

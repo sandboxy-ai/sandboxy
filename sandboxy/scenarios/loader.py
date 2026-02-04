@@ -28,6 +28,25 @@ class StepSpec(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
 
 
+class MLflowYamlConfig(BaseModel):
+    """MLflow configuration from scenario YAML.
+
+    Example:
+        mlflow:
+          enabled: true
+          experiment: "agent-evals"
+          tracking_uri: "http://localhost:5000"
+          tags:
+            team: "support-agents"
+            environment: "staging"
+    """
+
+    enabled: bool = False
+    experiment: str | None = None
+    tracking_uri: str | None = None
+    tags: dict[str, str] = Field(default_factory=dict)
+
+
 class McpServerSpec(BaseModel):
     """Specification for an MCP server connection.
 
@@ -74,8 +93,11 @@ class ScenarioSpec(BaseModel):
 
     # Evaluation
     goals: list[GoalSpec] = Field(default_factory=list)
-    evaluation: list[dict[str, Any]] = Field(default_factory=list)
+    evaluation: list[dict[str, Any]] | dict[str, Any] = Field(default_factory=list)
     scoring: dict[str, Any] = Field(default_factory=dict)
+
+    # MLflow integration (optional)
+    mlflow: MLflowYamlConfig | None = None
 
 
 def load_scenario(path: Path) -> ScenarioSpec:
@@ -148,7 +170,14 @@ def parse_scenario(raw: dict[str, Any]) -> ScenarioSpec:
 
     # Parse goals
     goals: list[GoalSpec] = []
-    for g in raw.get("goals", []):
+    goals_raw = raw.get("goals", [])
+
+    # Also check for goals nested inside evaluation dict
+    evaluation_raw = raw.get("evaluation", [])
+    if isinstance(evaluation_raw, dict) and "goals" in evaluation_raw:
+        goals_raw = evaluation_raw.get("goals", [])
+
+    for g in goals_raw:
         goals.append(
             GoalSpec(
                 id=g.get("id", f"goal_{len(goals)}"),
@@ -157,6 +186,17 @@ def parse_scenario(raw: dict[str, Any]) -> ScenarioSpec:
                 points=g.get("points", 0),
                 detection=g.get("detection", {}),
             )
+        )
+
+    # Parse MLflow config if present
+    mlflow_config: MLflowYamlConfig | None = None
+    if "mlflow" in raw and isinstance(raw["mlflow"], dict):
+        mlflow_raw = raw["mlflow"]
+        mlflow_config = MLflowYamlConfig(
+            enabled=mlflow_raw.get("enabled", False),
+            experiment=mlflow_raw.get("experiment"),
+            tracking_uri=mlflow_raw.get("tracking_uri"),
+            tags=mlflow_raw.get("tags", {}),
         )
 
     return ScenarioSpec(
@@ -174,6 +214,7 @@ def parse_scenario(raw: dict[str, Any]) -> ScenarioSpec:
         goals=goals,
         evaluation=raw.get("evaluation", []),
         scoring=raw.get("scoring", {}),
+        mlflow=mlflow_config,
     )
 
 
@@ -259,4 +300,5 @@ def apply_scenario_variables(spec: ScenarioSpec, variables: dict[str, Any]) -> S
         goals=spec.goals,
         evaluation=spec.evaluation,
         scoring=spec.scoring,
+        mlflow=spec.mlflow,  # Preserve MLflow config
     )

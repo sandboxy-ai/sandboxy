@@ -379,6 +379,10 @@ class RunScenarioRequest(BaseModel):
     max_turns: int = 20
     max_tokens: int = 1024
     temperature: float = 0.7
+    mlflow_export: bool = False
+    mlflow_tracking_uri: str | None = None
+    mlflow_experiment: str | None = None
+    mlflow_tracing: bool = True
 
 
 class RunScenarioResponse(BaseModel):
@@ -393,6 +397,9 @@ class RunScenarioResponse(BaseModel):
     final_state: dict[str, Any]
     evaluation: dict[str, Any] | None
     latency_ms: int
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost_usd: float | None = None
     error: str | None
 
 
@@ -404,6 +411,10 @@ class CompareModelsRequest(BaseModel):
     runs_per_model: int = 1
     variables: dict[str, Any] = Field(default_factory=dict)
     max_turns: int = 20
+    mlflow_export: bool = False
+    mlflow_tracking_uri: str | None = None
+    mlflow_experiment: str | None = None
+    mlflow_tracing: bool = True  # Enable LLM call tracing by default
 
 
 class CompareModelsResponse(BaseModel):
@@ -454,19 +465,72 @@ async def run_scenario(request: RunScenarioRequest) -> RunScenarioResponse:
         spec = load_unified_scenario(scenario_path)
         runner = UnifiedRunner()
 
-        result = await runner.run(
-            scenario=spec,
-            model=request.model,
-            variables=request.variables,
-            max_turns=request.max_turns,
-            max_tokens=request.max_tokens,
-            temperature=request.temperature,
-        )
+        # Setup MLflow if requested
+        mlflow_config = None
+        if request.mlflow_export:
+            try:
+                from sandboxy.mlflow import MLflowConfig
+
+                mlflow_config = MLflowConfig.resolve(
+                    cli_export=True,
+                    cli_tracking_uri=request.mlflow_tracking_uri,
+                    cli_experiment=request.mlflow_experiment,
+                    cli_tracing=request.mlflow_tracing,
+                    yaml_config=None,
+                    scenario_name=spec.name,
+                )
+            except ImportError:
+                pass  # MLflow not installed
+
+        # Run with MLflow context if enabled (connects traces to run)
+        if mlflow_config and mlflow_config.enabled:
+            from sandboxy.mlflow import MLflowExporter, mlflow_run_context
+            from sandboxy.mlflow.tracing import enable_tracing
+
+            if mlflow_config.tracing:
+                enable_tracing(
+                    tracking_uri=mlflow_config.tracking_uri,
+                    experiment_name=mlflow_config.experiment,
+                )
+
+            with mlflow_run_context(mlflow_config, run_name=request.model) as run_id:
+                result = await runner.run(
+                    scenario=spec,
+                    model=request.model,
+                    variables=request.variables,
+                    max_turns=request.max_turns,
+                    max_tokens=request.max_tokens,
+                    temperature=request.temperature,
+                )
+
+                if run_id:
+                    exporter = MLflowExporter(mlflow_config)
+                    exporter.log_to_active_run(
+                        result=result,
+                        scenario_path=scenario_path,
+                        scenario_name=spec.name,
+                        scenario_id=spec.id,
+                        agent_name=request.model,
+                    )
+        else:
+            result = await runner.run(
+                scenario=spec,
+                model=request.model,
+                variables=request.variables,
+                max_turns=request.max_turns,
+                max_tokens=request.max_tokens,
+                temperature=request.temperature,
+            )
 
         # Save result to runs/
         from sandboxy.local.results import save_run_result
 
         save_run_result(request.scenario_id, result.to_dict())
+
+        # Calculate cost
+        input_tokens = result.input_tokens or 0
+        output_tokens = result.output_tokens or 0
+        cost_usd = calculate_cost(result.model, input_tokens, output_tokens)
 
         return RunScenarioResponse(
             id=result.id,
@@ -481,6 +545,9 @@ async def run_scenario(request: RunScenarioRequest) -> RunScenarioResponse:
             final_state=result.final_state,
             evaluation=result.evaluation.to_dict() if result.evaluation else None,
             latency_ms=result.latency_ms,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost_usd=cost_usd,
             error=result.error,
         )
 
@@ -530,6 +597,19 @@ async def compare_models(request: CompareModelsRequest) -> CompareModelsResponse
 
         spec = load_unified_scenario(scenario_path)
 
+        # Enable MLflow tracing if requested (must be done BEFORE any LLM calls)
+        if request.mlflow_export and request.mlflow_tracing:
+            try:
+                from sandboxy.mlflow.tracing import enable_tracing
+
+                experiment = request.mlflow_experiment or spec.name
+                enable_tracing(
+                    tracking_uri=request.mlflow_tracking_uri,
+                    experiment_name=experiment,
+                )
+            except ImportError:
+                pass  # MLflow not installed
+
         comparison = await run_comparison(
             scenario=spec,
             models=request.models,
@@ -537,6 +617,31 @@ async def compare_models(request: CompareModelsRequest) -> CompareModelsResponse
             variables=request.variables,
             max_turns=request.max_turns,
         )
+
+        # MLflow export (if enabled)
+        if request.mlflow_export:
+            try:
+                from sandboxy.mlflow import MLflowConfig, MLflowExporter
+
+                for result in comparison.results:
+                    config = MLflowConfig.resolve(
+                        cli_export=True,
+                        cli_tracking_uri=request.mlflow_tracking_uri,
+                        cli_experiment=request.mlflow_experiment,
+                        cli_tracing=request.mlflow_tracing,
+                        yaml_config=None,
+                        scenario_name=spec.name,
+                    )
+                    exporter = MLflowExporter(config)
+                    exporter.export(
+                        result=result.to_dict(),
+                        scenario_path=scenario_path,
+                        agent_name=result.model,
+                    )
+            except ImportError:
+                logger.warning("MLflow not installed, skipping export")
+            except Exception as e:
+                logger.warning(f"Failed to export to MLflow: {e}")
 
         # Save comparison result
         from sandboxy.local.results import save_run_result
@@ -905,6 +1010,8 @@ class RunDatasetRequest(BaseModel):
     max_tokens: int = 1024
     temperature: float = 0.7
     parallel: int = 1
+    mlflow_enabled: bool = False
+    mlflow_experiment: str | None = None
 
 
 class RunDatasetResponse(BaseModel):
@@ -1335,25 +1442,81 @@ async def run_with_dataset(request: RunDatasetRequest) -> RunDatasetResponse:
         spec = load_unified_scenario(scenario_path)
         dataset = load_dataset(dataset_path)
 
-        if request.parallel > 1:
-            result = await run_dataset_parallel(
+        # Setup MLflow if enabled
+        mlflow_config = None
+        if request.mlflow_enabled:
+            try:
+                from sandboxy.mlflow import MLflowConfig
+
+                mlflow_config = MLflowConfig(
+                    enabled=True,
+                    experiment=request.mlflow_experiment or f"{spec.name}-dataset",
+                    tracing=False,  # Tracing not needed for dataset aggregates
+                )
+            except ImportError:
+                pass  # MLflow not installed
+
+        async def run_dataset_benchmark():
+            if request.parallel > 1:
+                return await run_dataset_parallel(
+                    scenario=spec,
+                    model=request.model,
+                    dataset=dataset,
+                    max_turns=request.max_turns,
+                    max_tokens=request.max_tokens,
+                    temperature=request.temperature,
+                    max_concurrent=request.parallel,
+                )
+            return await run_dataset(
                 scenario=spec,
                 model=request.model,
                 dataset=dataset,
                 max_turns=request.max_turns,
                 max_tokens=request.max_tokens,
                 temperature=request.temperature,
-                max_concurrent=request.parallel,
             )
+
+        # Run with MLflow context if enabled
+        if mlflow_config and mlflow_config.enabled:
+            from sandboxy.mlflow import mlflow_run_context
+
+            run_name = f"{request.model}-{request.dataset_id}"
+            with mlflow_run_context(mlflow_config, run_name=run_name) as run_id:
+                result = await run_dataset_benchmark()
+
+                # Log aggregate metrics to MLflow
+                if run_id:
+                    try:
+                        import mlflow
+
+                        mlflow.log_params(
+                            {
+                                "scenario_id": result.scenario_id,
+                                "dataset_id": result.dataset_id,
+                                "model": result.model,
+                                "total_cases": result.total_cases,
+                            }
+                        )
+                        mlflow.log_metrics(
+                            {
+                                "passed_cases": result.passed_cases,
+                                "failed_cases": result.failed_cases,
+                                "pass_rate": result.pass_rate,
+                                "avg_score": result.avg_score,
+                                "avg_percentage": result.avg_percentage,
+                                "total_time_ms": result.total_time_ms,
+                            }
+                        )
+                        # Log per-expected-outcome metrics
+                        for expected, counts in result.by_expected.items():
+                            total = counts.get("passed", 0) + counts.get("failed", 0)
+                            if total > 0:
+                                rate = counts.get("passed", 0) / total
+                                mlflow.log_metric(f"pass_rate_{expected}", rate)
+                    except Exception as e:
+                        logger.warning(f"Failed to log dataset metrics to MLflow: {e}")
         else:
-            result = await run_dataset(
-                scenario=spec,
-                model=request.model,
-                dataset=dataset,
-                max_turns=request.max_turns,
-                max_tokens=request.max_tokens,
-                temperature=request.temperature,
-            )
+            result = await run_dataset_benchmark()
 
         # Save result
         from sandboxy.local.results import save_run_result

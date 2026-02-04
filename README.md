@@ -161,6 +161,39 @@ sandboxy list-models --search claude
 sandboxy list-models --free
 ```
 
+## MLflow Integration
+
+Export scenario run results to MLflow for experiment tracking and model comparison.
+
+```bash
+# Install with MLflow support
+pip install sandboxy[mlflow]
+
+# Export run to MLflow
+sandboxy scenario scenarios/test.yml -m openai/gpt-4o --mlflow-export
+
+# Custom experiment name
+sandboxy scenario scenarios/test.yml -m gpt-4o --mlflow-export --mlflow-experiment "my-evals"
+```
+
+Or enable in scenario YAML:
+
+```yaml
+id: my-scenario
+name: "My Test"
+
+mlflow:
+  enabled: true
+  experiment: "agent-evals"
+  tags:
+    team: "support"
+
+system_prompt: |
+  ...
+```
+
+See `MLFLOW_TRACKING_URI` env variable to configure the MLflow server.
+
 ## Configuration
 
 Environment variables (in `~/.sandboxy/.env` or project `.env`):
@@ -170,6 +203,7 @@ Environment variables (in `~/.sandboxy/.env` or project `.env`):
 | `OPENROUTER_API_KEY` | OpenRouter API key (400+ models) |
 | `OPENAI_API_KEY` | Direct OpenAI access |
 | `ANTHROPIC_API_KEY` | Direct Anthropic access |
+| `MLFLOW_TRACKING_URI` | MLflow tracking server URI |
 
 ## Project Structure
 
