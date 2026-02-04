@@ -7,13 +7,20 @@ import { api, RunScenarioResponse, CompareModelsResponse } from '../lib/api'
 
 export type RunState = 'idle' | 'running' | 'completed' | 'error'
 
+export interface MlflowOptions {
+  enabled: boolean
+  trackingUri?: string
+  experiment?: string
+  tracing?: boolean
+}
+
 export interface UseScenarioRunResult {
   state: RunState
   result: RunScenarioResponse | null
   comparison: CompareModelsResponse | null
   error: string | null
-  runScenario: (scenarioId: string, model: string, variables?: Record<string, unknown>) => Promise<void>
-  compareModels: (scenarioId: string, models: string[], runsPerModel?: number, variables?: Record<string, unknown>) => Promise<void>
+  runScenario: (scenarioId: string, model: string, variables?: Record<string, unknown>, mlflow?: MlflowOptions) => Promise<void>
+  compareModels: (scenarioId: string, models: string[], runsPerModel?: number, variables?: Record<string, unknown>, mlflow?: MlflowOptions) => Promise<void>
   reset: () => void
 }
 
@@ -33,7 +40,8 @@ export function useScenarioRun(): UseScenarioRunResult {
   const runScenario = useCallback(async (
     scenarioId: string,
     model: string,
-    variables?: Record<string, unknown>
+    variables?: Record<string, unknown>,
+    mlflow?: MlflowOptions
   ) => {
     reset()
     setState('running')
@@ -43,6 +51,10 @@ export function useScenarioRun(): UseScenarioRunResult {
         scenario_id: scenarioId,
         model,
         variables,
+        mlflow_export: mlflow?.enabled,
+        mlflow_tracking_uri: mlflow?.trackingUri,
+        mlflow_experiment: mlflow?.experiment,
+        mlflow_tracing: mlflow?.tracing,
       })
 
       if (response.error) {
@@ -62,7 +74,8 @@ export function useScenarioRun(): UseScenarioRunResult {
     scenarioId: string,
     models: string[],
     runsPerModel: number = 1,
-    variables?: Record<string, unknown>
+    variables?: Record<string, unknown>,
+    mlflow?: MlflowOptions
   ) => {
     reset()
     setState('running')
@@ -73,6 +86,10 @@ export function useScenarioRun(): UseScenarioRunResult {
         models,
         runs_per_model: runsPerModel,
         variables,
+        mlflow_export: mlflow?.enabled,
+        mlflow_tracking_uri: mlflow?.trackingUri,
+        mlflow_experiment: mlflow?.experiment,
+        mlflow_tracing: mlflow?.tracing,
       })
 
       setState('completed')

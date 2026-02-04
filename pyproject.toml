@@ -41,6 +41,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+mlflow = [
+    "mlflow>=3.0",
+]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=4.0",
@@ -120,6 +123,8 @@ ignore = [
 # S307: eval usage with safety measures (safe_builtins, simpleeval)
 "sandboxy/tools/yaml_tools.py" = ["S307"]
 "sandboxy/core/safe_eval.py" = ["S307"]
+# S603, S607, S110: git subprocess call is safe (hardcoded command, known input)
+"sandboxy/mlflow/tags.py" = ["S603", "S607", "S110"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

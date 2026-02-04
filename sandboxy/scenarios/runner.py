@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,16 @@ class ScenarioEvent(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
+class GoalResult(BaseModel):
+    """Result of evaluating a single goal."""
+
+    id: str
+    name: str
+    achieved: bool
+    points: int
+    reason: str = ""
+
+
 class ScenarioResult(BaseModel):
     """Result of running a scenario."""
 
@@ -35,7 +46,12 @@ class ScenarioResult(BaseModel):
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
     final_state: dict[str, Any] = Field(default_factory=dict)
     goals_achieved: list[str] = Field(default_factory=list)
+    goal_results: list[GoalResult] = Field(default_factory=list)
     score: float = 0.0
+    max_score: float = 0.0
+    latency_ms: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
 
     def to_json(self, indent: int | None = None) -> str:
         """Serialize result to JSON string."""
@@ -70,7 +86,11 @@ class ScenarioResult(BaseModel):
         lines.append("")
         lines.append(f"Tool Calls Made: {len(self.tool_calls)}")
         lines.append(f"Goals Achieved: {len(self.goals_achieved)}")
-        lines.append(f"Score: {self.score}")
+        lines.append(f"Score: {self.score}/{self.max_score}")
+        if self.latency_ms:
+            lines.append(f"Latency: {self.latency_ms}ms")
+        if self.input_tokens or self.output_tokens:
+            lines.append(f"Tokens: {self.input_tokens} in / {self.output_tokens} out")
 
         return "\n".join(lines)
 
@@ -176,6 +196,8 @@ class ScenarioRunner:
         Returns:
             ScenarioResult with events and evaluation
         """
+        start_time = time.perf_counter()
+
         try:
             # Load MCP tools if configured
             await self._load_mcp_tools()
@@ -188,9 +210,21 @@ class ScenarioRunner:
             for step in self.scenario.steps:
                 await self._execute_step(step, max_turns)
 
-            # Evaluate goals
+            # Evaluate goals and build detailed results
             goals_achieved = self._evaluate_goals()
+            goal_results = self._build_goal_results(goals_achieved)
             score = self._compute_score(goals_achieved)
+            max_score = sum(g.points for g in self.scenario.goals)
+
+            # Get token usage from agent if available
+            input_tokens = 0
+            output_tokens = 0
+            if hasattr(self.agent, "get_usage"):
+                usage = self.agent.get_usage()
+                input_tokens = usage.get("input_tokens", 0)
+                output_tokens = usage.get("output_tokens", 0)
+
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
 
             return ScenarioResult(
                 scenario_id=self.scenario.id,
@@ -199,7 +233,12 @@ class ScenarioRunner:
                 tool_calls=self.tool_call_log,
                 final_state=self.env_state.copy(),
                 goals_achieved=goals_achieved,
+                goal_results=goal_results,
                 score=score,
+                max_score=max_score,
+                latency_ms=latency_ms,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
             )
         finally:
             await self._cleanup_mcp()
@@ -439,6 +478,22 @@ class ScenarioRunner:
                         break
 
         return list(set(achieved))  # Deduplicate
+
+    def _build_goal_results(self, goals_achieved: list[str]) -> list[GoalResult]:
+        """Build detailed goal results for MLflow logging."""
+        results = []
+        for goal in self.scenario.goals:
+            achieved = goal.id in goals_achieved
+            results.append(
+                GoalResult(
+                    id=goal.id,
+                    name=goal.name or goal.id,
+                    achieved=achieved,
+                    points=goal.points if achieved else 0,
+                    reason="Goal achieved" if achieved else "Goal not achieved",
+                )
+            )
+        return results
 
     def _compute_score(self, goals_achieved: list[str]) -> float:
         """Compute score based on achieved goals."""

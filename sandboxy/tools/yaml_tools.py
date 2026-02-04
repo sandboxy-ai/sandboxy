@@ -288,6 +288,17 @@ class YamlMockTool:
         self.config = config.config
         self.spec = spec
         self._call_log: list[dict[str, Any]] = []
+        self._overrides: dict[str, Any] = {}
+
+    def set_overrides(self, overrides: dict[str, Any]) -> None:
+        """Set response overrides for dataset benchmarking.
+
+        Args:
+            overrides: Dict mapping "tool.action" or "tool" to override response data.
+                      When a matching action is called, returns the override data
+                      instead of the normal mock response.
+        """
+        self._overrides = overrides
 
     @property
     def call_log(self) -> list[dict[str, Any]]:
@@ -346,6 +357,13 @@ class YamlMockTool:
         # Apply side effects
         for effect in action_spec.side_effects:
             effect.apply(env_state, validated_args)
+
+        # Check for override (dataset benchmarking)
+        override_key = f"{self.name}.{action}"
+        if override_key in self._overrides:
+            return ToolResult(success=True, data=self._overrides[override_key])
+        if self.name in self._overrides:
+            return ToolResult(success=True, data=self._overrides[self.name])
 
         # Compute return value
         result_value = self._compute_return(action_spec, validated_args, env_state)
