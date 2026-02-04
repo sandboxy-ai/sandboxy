@@ -180,7 +180,6 @@ def _adapt_scenario_result(result: Any) -> Any:
     This creates an adapter object.
     """
     from dataclasses import dataclass, field
-    from typing import Any as AnyType
 
     @dataclass
     class GoalResultAdapter:

@@ -44,19 +44,23 @@ def build_goal_metrics(goals: list) -> dict[str, float]:
         goals: List of GoalResult objects from scenario evaluation
 
     Returns:
-        Dict mapping goal_{goal_name} to score value (1.0 if achieved, 0.0 if not)
+        Dict mapping goal_{goal_name} to score value
     """
     metrics: dict[str, float] = {}
     for goal in goals:
         # Handle both object (GoalResult) and dict formats
         if isinstance(goal, dict):
             name = goal.get("name", goal.get("id", "unnamed"))
-            achieved = goal.get("achieved", False)
+            score = goal.get("score")
+            if score is None:
+                score = 1.0 if goal.get("achieved", False) else 0.0
         else:
             name = getattr(goal, "name", getattr(goal, "id", "unnamed"))
-            achieved = getattr(goal, "achieved", False)
+            score = getattr(goal, "score", None)
+            if score is None:
+                score = 1.0 if getattr(goal, "achieved", False) else 0.0
         key = f"goal_{sanitize_metric_name(name)}"
-        metrics[key] = 1.0 if achieved else 0.0
+        metrics[key] = float(score)
     return metrics
 
 
