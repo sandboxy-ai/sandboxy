@@ -75,7 +75,37 @@ Opens a browser with a local UI for browsing scenarios, running them, and viewin
 
 ## Writing Scenarios
 
-Scenarios are YAML files that define agent interactions:
+Scenarios are YAML files that define agent interactions. Sandboxy supports two modes:
+
+### Single-turn mode
+
+Use `prompt:` for simple request/response scenarios without tool use:
+
+```yaml
+id: simple-qa
+name: "Simple Q&A"
+
+system_prompt: |
+  You are a helpful assistant.
+
+prompt: |
+  What is the capital of France?
+
+evaluation:
+  max_score: 100
+  goals:
+    - id: correct_answer
+      name: "Correct Answer"
+      points: 100
+      detection:
+        type: agent_contains
+        patterns:
+          - "Paris"
+```
+
+### Agentic mode
+
+Use `steps:` for multi-turn scenarios with tool support:
 
 ```yaml
 id: customer-support
@@ -86,35 +116,45 @@ system_prompt: |
   You are a customer support agent for TechCo.
   Be helpful but follow company policy.
 
-user_prompt: |
-  I want a refund for my purchase. Order #12345.
-
-# Define tools the agent can use
-tools:
-  - name: lookup_order
-    description: "Look up order details"
+steps:
+  - id: user_request
+    action: inject_user
     params:
-      order_id:
-        type: string
-        required: true
-    returns: "Order details for {{order_id}}"
+      content: "I want a refund for my purchase. Order #12345."
+  - id: agent_response
+    action: await_agent
 
-# Evaluation criteria
-goals:
-  - name: acknowledged_request
-    description: "Agent acknowledged the refund request"
-    check:
-      type: contains
-      value: "refund"
+# Tools are only available in agentic mode (with steps)
+tools:
+  lookup_order:
+    description: "Look up order details"
+    actions:
+      call:
+        params:
+          order_id:
+            type: string
+            required: true
+        returns: "Order details for {{order_id}}"
 
-  - name: looked_up_order
-    description: "Agent used the lookup tool"
-    check:
-      type: tool_called
-      tool: lookup_order
-
-scoring:
+evaluation:
   max_score: 100
+  goals:
+    - id: acknowledged_request
+      name: "Acknowledged Request"
+      description: "Agent acknowledged the refund request"
+      points: 50
+      detection:
+        type: agent_contains
+        patterns:
+          - "refund"
+
+    - id: looked_up_order
+      name: "Looked Up Order"
+      description: "Agent used the lookup tool"
+      points: 50
+      detection:
+        type: tool_called
+        tool: lookup_order
 ```
 
 ## CLI Reference
