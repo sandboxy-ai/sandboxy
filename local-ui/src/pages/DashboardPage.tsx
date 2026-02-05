@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Play, FileCode, Wrench, Server, Plus, RefreshCw, Trash2, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
+import { Play, FileCode, Wrench, Server, Plus, RefreshCw, Trash2, CheckCircle, XCircle, AlertCircle, ChevronRight } from 'lucide-react'
 import { api, ProviderSummary, AddProviderRequest } from '../lib/api'
 
 interface LocalFile {
@@ -183,13 +183,20 @@ export default function DashboardPage() {
             {status.scenarios.map((scenario) => (
               <div
                 key={scenario.id}
-                className="panel-card p-4"
+                className="panel-card p-4 hover:border-slate-600 transition-colors"
               >
-                <h3 className="font-medium text-slate-100 mb-1">{scenario.name}</h3>
-                <p className="text-sm text-slate-400 mb-3 line-clamp-2">
-                  {scenario.description || 'No description'}
-                </p>
-                <div className="flex justify-between items-center">
+                <Link to={`/scenario/${scenario.id}`} className="block mb-3">
+                  <div className="flex items-start justify-between">
+                    <h3 className="font-medium text-slate-100 mb-1 hover:text-orange-400 transition-colors">
+                      {scenario.name}
+                    </h3>
+                    <ChevronRight size={16} className="text-slate-600 mt-1 flex-shrink-0" />
+                  </div>
+                  <p className="text-sm text-slate-400 line-clamp-2">
+                    {scenario.description || 'No description'}
+                  </p>
+                </Link>
+                <div className="flex justify-between items-center pt-2 border-t border-slate-700/40">
                   <span className="text-xs text-slate-500">{scenario.relative_path}</span>
                   <Link
                     to={`/run/${scenario.id}`}
