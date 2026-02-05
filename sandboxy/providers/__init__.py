@@ -40,6 +40,7 @@ from sandboxy.providers.registry import (
     get_provider,
     get_registry,
     reload_local_providers,
+    reset_registry,
 )
 
 __all__ = [
@@ -53,6 +54,7 @@ __all__ = [
     "get_provider",
     "get_registry",
     "reload_local_providers",
+    "reset_registry",
     # Local provider
     "LocalProvider",
     "LocalProviderConnectionError",

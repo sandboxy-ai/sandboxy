@@ -36,6 +36,19 @@ def create_local_app(
         root_dir: Working directory for scenarios/tools/agents.
         local_ui_path: Path to local UI static files.
     """
+    # Load .env from root_dir to pick up API keys from the project directory
+    # This is important when root_dir differs from cwd
+    env_file = root_dir / ".env"
+    if env_file.exists():
+        load_dotenv(env_file, override=True)
+        logger.info(f"Loaded environment from {env_file}")
+
+        # Reset provider registry so it picks up the newly loaded API keys
+        from sandboxy.providers.registry import reset_registry
+
+        reset_registry()
+        logger.info("Provider registry reset after loading project .env")
+
     from sandboxy.local.context import LocalContext, set_local_context
 
     ctx = LocalContext(root_dir=root_dir)

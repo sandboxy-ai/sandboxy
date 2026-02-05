@@ -154,22 +154,33 @@ class ProviderRegistry:
         if "/" in model_id:
             provider_name, model_name = model_id.split("/", 1)
 
-            # Check for local provider first (e.g., "ollama/llama3")
+            # Priority 1: Check for LOCAL provider with matching name
+            # Local providers take precedence over cloud providers
             if provider_name in self.providers:
                 provider = self.providers[provider_name]
-                # Verify it's a local provider or supports the model
-                if hasattr(provider, "config") or provider.supports_model(model_id):
+                # Only use if it's a local provider (has config attribute)
+                if hasattr(provider, "config"):
                     return provider
 
-            # OpenRouter format (e.g., "openai/gpt-4o")
+            # Priority 2: OpenRouter for provider/model format (e.g., "openai/gpt-4o")
             if "openrouter" in self.providers:
                 return self.providers["openrouter"]
 
-            # Fallback to direct provider if prefix matches
+            # Priority 3: Fallback to direct cloud provider if available
             if provider_name == "openai" and "openai" in self.providers:
                 return self.providers["openai"]
             if provider_name == "anthropic" and "anthropic" in self.providers:
                 return self.providers["anthropic"]
+
+            # No valid provider found for prefixed model - raise clear error
+            available = list(self.providers.keys())
+            raise ProviderError(
+                f"No provider available for model '{model_id}'. "
+                f"The '{provider_name}/' prefix requires OpenRouter (set OPENROUTER_API_KEY) "
+                f"or a local provider named '{provider_name}'. "
+                f"Available providers: {available}",
+                provider="registry",
+            )
 
         # No prefix - use direct providers
         model_lower = model_id.lower()
@@ -278,6 +289,16 @@ def get_registry() -> ProviderRegistry:
     if _registry is None:
         _registry = ProviderRegistry()
     return _registry
+
+
+def reset_registry() -> None:
+    """Reset the global provider registry.
+
+    Forces re-initialization on next get_registry() call.
+    Useful after loading new environment variables.
+    """
+    global _registry
+    _registry = None
 
 
 def get_provider(model_id: str) -> BaseProvider:

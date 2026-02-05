@@ -493,7 +493,10 @@ async def run_scenario(request: RunScenarioRequest) -> RunScenarioResponse:
                     experiment_name=mlflow_config.experiment,
                 )
 
-            with mlflow_run_context(mlflow_config, run_name=request.model) as run_id:
+            # Short run name - just the model (scenario is in experiment name)
+            run_name = request.model.split("/")[-1] if "/" in request.model else request.model
+
+            with mlflow_run_context(mlflow_config, run_name=run_name) as run_id:
                 result = await runner.run(
                     scenario=spec,
                     model=request.model,
@@ -633,12 +636,17 @@ async def compare_models(request: CompareModelsRequest) -> CompareModelsResponse
                         scenario_name=spec.name,
                     )
                     exporter = MLflowExporter(config)
+
+                    # Short run name - just the model
+                    run_name = result.model.split("/")[-1] if "/" in result.model else result.model
+
                     exporter.export(
                         result=result.to_dict(),
                         scenario_path=scenario_path,
                         scenario_name=spec.name,
                         scenario_id=spec.id,
                         agent_name=result.model,
+                        run_name=run_name,
                     )
             except ImportError:
                 logger.warning("MLflow not installed, skipping export")
@@ -1513,7 +1521,9 @@ async def run_with_dataset(request: RunDatasetRequest) -> RunDatasetResponse:
         if mlflow_config and mlflow_config.enabled:
             from sandboxy.mlflow import mlflow_run_context
 
-            run_name = f"{request.model}-{request.dataset_id}"
+            # Short run name - model + dataset
+            model_short = request.model.split("/")[-1] if "/" in request.model else request.model
+            run_name = f"{model_short} ({request.dataset_id})"
             with mlflow_run_context(mlflow_config, run_name=run_name) as run_id:
                 result = await run_dataset_benchmark()
 

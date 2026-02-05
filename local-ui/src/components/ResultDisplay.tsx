@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { CheckCircle, XCircle, Trophy, Clock, Zap, DollarSign, Hash, MessageSquare, ChevronDown, ChevronRight, Eye, X, AlertCircle } from 'lucide-react'
 import { RunScenarioResponse, CompareModelsResponse } from '../lib/api'
 
-export function formatCost(cost: number | null | undefined): string {
+export function formatCost(cost: number | null | undefined, isLocal?: boolean): string {
   if (cost === null || cost === undefined) return '-'
+  // Local models have cost = 0 or is_local flag
+  if (isLocal === true || cost === 0) return 'Local'
   if (cost < 0.0001) return '<$0.0001'
   if (cost < 0.01) return `$${cost.toFixed(4)}`
   return `$${cost.toFixed(3)}`
@@ -73,7 +75,7 @@ export function SingleRunResult({ result }: { result: RunScenarioResponse }) {
             <DollarSign className="w-4 h-4" />
             Cost
           </div>
-          <div className="text-2xl font-bold text-emerald-300">{formatCost(result.cost_usd)}</div>
+          <div className="text-2xl font-bold text-emerald-300">{formatCost(result.cost_usd, result.is_local)}</div>
         </div>
       </div>
 

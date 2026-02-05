@@ -833,7 +833,9 @@ def scenario(
                 )
 
             # Start run, execute scenario, then log metrics - all connected
-            with mlflow_run_context(mlflow_config, run_name=model_id) as run_id:
+            # Short run name - just the model
+            run_name = model_id.split("/")[-1] if "/" in model_id else model_id
+            with mlflow_run_context(mlflow_config, run_name=run_name) as run_id:
                 runner = ScenarioRunner(scenario=spec, agent=agent)
                 result = runner.run(max_turns=max_turns)
 

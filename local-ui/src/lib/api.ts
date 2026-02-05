@@ -110,6 +110,8 @@ export interface RunScenarioResponse {
   output_tokens: number
   cost_usd: number | null
   error: string | null
+  is_local?: boolean
+  provider_name?: string
 }
 
 export interface CompareModelsRequest {
