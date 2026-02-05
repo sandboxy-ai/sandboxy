@@ -1,6 +1,16 @@
 import { useState, useRef, useEffect } from 'react'
-import { ChevronDown, Check, X, Search } from 'lucide-react'
+import { ChevronDown, Check, X, Search, Monitor } from 'lucide-react'
 import { ModelInfo } from '../lib/api'
+
+// Badge component for local models
+function LocalBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/20 border border-emerald-500/40 rounded text-xs text-emerald-400">
+      <Monitor size={10} />
+      Local
+    </span>
+  )
+}
 
 interface ModelSelectorProps {
   models: ModelInfo[]
@@ -43,16 +53,31 @@ export function ModelSelector({ models, value, onChange, disabled, placeholder =
 
   // Group models by provider
   const groupedModels = filteredModels.reduce((acc, model) => {
-    const provider = model.id.split('/')[0] || 'other'
+    // Use provider_name for local models, otherwise extract from id
+    const provider = model.provider_name || model.id.split('/')[0] || 'other'
     if (!acc[provider]) acc[provider] = []
     acc[provider].push(model)
     return acc
   }, {} as Record<string, ModelInfo[]>)
 
-  const providerOrder = ['openai', 'anthropic', 'google', 'x-ai', 'deepseek', 'meta-llama', 'mistralai', 'qwen', 'perplexity']
+  // Local providers first, then cloud providers in preferred order
+  const cloudProviderOrder = ['openai', 'anthropic', 'google', 'x-ai', 'deepseek', 'meta-llama', 'mistralai', 'qwen', 'perplexity']
+
+  // Check if a provider group has local models
+  const isLocalProvider = (provider: string) => {
+    return groupedModels[provider]?.some(m => m.is_local)
+  }
+
   const sortedProviders = Object.keys(groupedModels).sort((a, b) => {
-    const aIdx = providerOrder.indexOf(a)
-    const bIdx = providerOrder.indexOf(b)
+    // Local providers always come first
+    const aIsLocal = isLocalProvider(a)
+    const bIsLocal = isLocalProvider(b)
+    if (aIsLocal && !bIsLocal) return -1
+    if (!aIsLocal && bIsLocal) return 1
+
+    // Within same category, sort by preference
+    const aIdx = cloudProviderOrder.indexOf(a)
+    const bIdx = cloudProviderOrder.indexOf(b)
     if (aIdx === -1 && bIdx === -1) return a.localeCompare(b)
     if (aIdx === -1) return 1
     if (bIdx === -1) return -1
@@ -70,9 +95,10 @@ export function ModelSelector({ models, value, onChange, disabled, placeholder =
         } ${open ? 'ring-2 ring-orange-400' : ''}`}
       >
         {selectedModel ? (
-          <div className="flex items-center justify-between flex-1 min-w-0">
+          <div className="flex items-center justify-between flex-1 min-w-0 gap-2">
             <span className="text-slate-100 truncate">{selectedModel.name}</span>
-            <span className="text-xs text-slate-500 ml-2 shrink-0">{selectedModel.price}</span>
+            {selectedModel.is_local && <LocalBadge />}
+            <span className="text-xs text-slate-500 shrink-0">{selectedModel.price}</span>
           </div>
         ) : (
           <span className="text-slate-500">{placeholder}</span>
@@ -101,8 +127,9 @@ export function ModelSelector({ models, value, onChange, disabled, placeholder =
           <div className="overflow-y-auto flex-1">
             {sortedProviders.map(provider => (
               <div key={provider}>
-                <div className="px-3 py-1.5 text-xs font-medium text-slate-500 uppercase bg-slate-900 sticky top-0">
+                <div className="px-3 py-1.5 text-xs font-medium text-slate-500 uppercase bg-slate-900 sticky top-0 flex items-center gap-2">
                   {provider}
+                  {isLocalProvider(provider) && <LocalBadge />}
                 </div>
                 {groupedModels[provider].map(model => (
                   <button
@@ -119,8 +146,9 @@ export function ModelSelector({ models, value, onChange, disabled, placeholder =
                         : 'hover:bg-slate-800 text-slate-100'
                     }`}
                   >
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 flex items-center gap-2">
                       <div className="truncate">{model.name}</div>
+                      {model.is_local && !isLocalProvider(provider) && <LocalBadge />}
                     </div>
                     <span className="text-xs text-slate-500 shrink-0">{model.price}</span>
                     {model.id === value && <Check size={16} className="text-orange-400 shrink-0" />}
@@ -188,18 +216,32 @@ export function MultiModelSelector({ models, selected, onChange, disabled }: Mul
     m.id.toLowerCase().includes(search.toLowerCase())
   )
 
-  // Group models by provider
+  // Group models by provider (use provider_name for local models)
   const groupedModels = filteredModels.reduce((acc, model) => {
-    const provider = model.id.split('/')[0] || 'other'
+    const provider = model.provider_name || model.id.split('/')[0] || 'other'
     if (!acc[provider]) acc[provider] = []
     acc[provider].push(model)
     return acc
   }, {} as Record<string, ModelInfo[]>)
 
-  const providerOrder = ['openai', 'anthropic', 'google', 'x-ai', 'deepseek', 'meta-llama', 'mistralai', 'qwen', 'perplexity']
+  // Local providers first, then cloud providers in preferred order
+  const cloudProviderOrder = ['openai', 'anthropic', 'google', 'x-ai', 'deepseek', 'meta-llama', 'mistralai', 'qwen', 'perplexity']
+
+  // Check if a provider group has local models
+  const isLocalProvider = (provider: string) => {
+    return groupedModels[provider]?.some(m => m.is_local)
+  }
+
   const sortedProviders = Object.keys(groupedModels).sort((a, b) => {
-    const aIdx = providerOrder.indexOf(a)
-    const bIdx = providerOrder.indexOf(b)
+    // Local providers always come first
+    const aIsLocal = isLocalProvider(a)
+    const bIsLocal = isLocalProvider(b)
+    if (aIsLocal && !bIsLocal) return -1
+    if (!aIsLocal && bIsLocal) return 1
+
+    // Within same category, sort by preference
+    const aIdx = cloudProviderOrder.indexOf(a)
+    const bIdx = cloudProviderOrder.indexOf(b)
     if (aIdx === -1 && bIdx === -1) return a.localeCompare(b)
     if (aIdx === -1) return 1
     if (bIdx === -1) return -1
@@ -216,8 +258,13 @@ export function MultiModelSelector({ models, selected, onChange, disabled }: Mul
             return (
               <span
                 key={modelId}
-                className="flex items-center gap-1.5 px-2.5 py-1 bg-orange-500/20 border border-orange-400/40 rounded-full text-sm text-slate-100"
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm text-slate-100 ${
+                  model?.is_local
+                    ? 'bg-emerald-500/20 border border-emerald-400/40'
+                    : 'bg-orange-500/20 border border-orange-400/40'
+                }`}
               >
+                {model?.is_local && <Monitor size={12} className="text-emerald-400" />}
                 {model?.name || modelId}
                 <button
                   type="button"
@@ -268,8 +315,9 @@ export function MultiModelSelector({ models, selected, onChange, disabled }: Mul
           <div className="overflow-y-auto flex-1">
             {sortedProviders.map(provider => (
               <div key={provider}>
-                <div className="px-3 py-1.5 text-xs font-medium text-slate-500 uppercase bg-slate-900 sticky top-0">
+                <div className="px-3 py-1.5 text-xs font-medium text-slate-500 uppercase bg-slate-900 sticky top-0 flex items-center gap-2">
                   {provider}
+                  {isLocalProvider(provider) && <LocalBadge />}
                 </div>
                 {groupedModels[provider].map(model => {
                   const isSelected = selected.includes(model.id)
@@ -289,8 +337,9 @@ export function MultiModelSelector({ models, selected, onChange, disabled }: Mul
                       }`}>
                         {isSelected && <Check size={12} className="text-slate-900" />}
                       </div>
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0 flex items-center gap-2">
                         <div className="truncate">{model.name}</div>
+                        {model.is_local && !isLocalProvider(provider) && <LocalBadge />}
                       </div>
                       <span className="text-xs text-slate-500 shrink-0">{model.price}</span>
                     </button>

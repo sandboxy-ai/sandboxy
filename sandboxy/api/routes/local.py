@@ -694,10 +694,40 @@ def calculate_cost(model_id: str, input_tokens: int, output_tokens: int) -> floa
 
 @router.get("/local/models")
 async def list_available_models() -> list[dict[str, Any]]:
-    """List available models from OpenRouter."""
+    """List available models from OpenRouter and local providers."""
+    from sandboxy.providers.config import get_enabled_providers
+    from sandboxy.providers.local import LocalProvider
     from sandboxy.providers.openrouter import OPENROUTER_MODELS
 
     models = []
+
+    # Add models from local providers first
+    for provider_config in get_enabled_providers():
+        try:
+            provider = LocalProvider(provider_config)
+            local_models = await provider.refresh_models()
+            await provider.close()
+
+            for model in local_models:
+                # Model ID includes provider prefix for routing
+                full_model_id = f"{provider_config.name}/{model.id}"
+                models.append(
+                    {
+                        "id": full_model_id,
+                        "name": model.name,
+                        "price": "Local",
+                        "pricing": {"input": 0, "output": 0},
+                        "provider": provider_config.name,
+                        "context_length": model.context_length,
+                        "supports_vision": model.supports_vision,
+                        "is_local": True,
+                        "provider_name": provider_config.name,
+                    }
+                )
+        except Exception as e:
+            logger.warning(f"Failed to fetch models from {provider_config.name}: {e}")
+
+    # Add OpenRouter models
     for model_id, info in OPENROUTER_MODELS.items():
         # Format price string
         if info.input_cost_per_million == 0 and info.output_cost_per_million == 0:
@@ -717,6 +747,7 @@ async def list_available_models() -> list[dict[str, Any]]:
                 "provider": info.provider,
                 "context_length": info.context_length,
                 "supports_vision": info.supports_vision,
+                "is_local": False,
             }
         )
 

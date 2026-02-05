@@ -4,6 +4,7 @@ Supports multiple LLM providers through a unified interface:
 - OpenRouter (400+ models via single API)
 - OpenAI (direct)
 - Anthropic (direct)
+- Local providers (Ollama, LM Studio, vLLM, OpenAI-compatible)
 
 Usage:
     from sandboxy.providers import get_provider, ProviderRegistry
@@ -12,23 +13,56 @@ Usage:
     provider = get_provider("openai/gpt-4o")
     response = await provider.complete("openai/gpt-4o", messages)
 
-    # Or use the registry
+    # Or use the registry for local models
     registry = ProviderRegistry()
-    provider = registry.get_provider_for_model("anthropic/claude-3-opus")
+    provider = registry.get_provider_for_model("ollama/llama3")
 """
 
 from sandboxy.providers.base import (
     BaseProvider,
+    ModelInfo,
     ModelResponse,
     ProviderError,
 )
-from sandboxy.providers.registry import ProviderRegistry, get_provider, get_registry
+from sandboxy.providers.config import (
+    LocalModelInfo,
+    LocalProviderConfig,
+    ProvidersConfigFile,
+    ProviderStatus,
+    ProviderStatusEnum,
+    get_enabled_providers,
+    load_providers_config,
+    save_providers_config,
+)
+from sandboxy.providers.local import LocalProvider, LocalProviderConnectionError
+from sandboxy.providers.registry import (
+    ProviderRegistry,
+    get_provider,
+    get_registry,
+    reload_local_providers,
+)
 
 __all__ = [
+    # Base types
     "BaseProvider",
+    "ModelInfo",
     "ModelResponse",
     "ProviderError",
+    # Registry
     "ProviderRegistry",
     "get_provider",
     "get_registry",
+    "reload_local_providers",
+    # Local provider
+    "LocalProvider",
+    "LocalProviderConnectionError",
+    "LocalProviderConfig",
+    "LocalModelInfo",
+    "ProvidersConfigFile",
+    "ProviderStatus",
+    "ProviderStatusEnum",
+    # Config functions
+    "load_providers_config",
+    "save_providers_config",
+    "get_enabled_providers",
 ]

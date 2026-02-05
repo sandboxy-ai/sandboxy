@@ -44,6 +44,8 @@ export interface ModelInfo {
   id: string
   name: string
   price: string
+  is_local?: boolean
+  provider_name?: string
 }
 
 export interface RunScenarioRequest {
@@ -245,7 +247,7 @@ export interface RunDatasetResponse {
 }
 
 class ApiClient {
-  private async fetch<T>(url: string, options?: RequestInit): Promise<T> {
+  protected async fetch<T>(url: string, options?: RequestInit): Promise<T> {
     const response = await fetch(`${API_BASE}${url}`, {
       ...options,
       headers: {
@@ -360,4 +362,87 @@ class ApiClient {
   }
 }
 
-export const api = new ApiClient()
+// --- Provider Types ---
+
+export interface ProviderSummary {
+  name: string
+  type: string
+  base_url: string
+  enabled: boolean
+  status: 'connected' | 'disconnected' | 'error' | 'unknown'
+  model_count: number
+  models: string[]
+}
+
+export interface ProviderListResponse {
+  providers: ProviderSummary[]
+}
+
+export interface LocalModelInfoResponse {
+  id: string
+  name: string
+  context_length: number
+  supports_tools: boolean
+  is_local: boolean
+}
+
+export interface ProviderDetailResponse {
+  config: Record<string, unknown>
+  status: {
+    status: string
+    last_checked: string | null
+    available_models: string[]
+    latency_ms: number | null
+    error_message: string | null
+  }
+  models: LocalModelInfoResponse[]
+}
+
+export interface AddProviderRequest {
+  name: string
+  type: 'ollama' | 'lmstudio' | 'vllm' | 'openai-compatible'
+  base_url: string
+  api_key?: string | null
+  models?: string[]
+  default_params?: Record<string, unknown>
+}
+
+export interface TestConnectionResponse {
+  success: boolean
+  latency_ms: number | null
+  models_found: string[]
+  error: string | null
+}
+
+// Extend ApiClient with provider methods
+class ApiClientWithProviders extends ApiClient {
+  async listProviders(): Promise<ProviderSummary[]> {
+    const response = await this.fetch<ProviderListResponse>('/providers')
+    return response.providers
+  }
+
+  async addProvider(request: AddProviderRequest): Promise<ProviderSummary> {
+    return this.fetch<ProviderSummary>('/providers', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
+  }
+
+  async getProvider(name: string): Promise<ProviderDetailResponse> {
+    return this.fetch<ProviderDetailResponse>(`/providers/${encodeURIComponent(name)}`)
+  }
+
+  async deleteProvider(name: string): Promise<void> {
+    await this.fetch<void>(`/providers/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    })
+  }
+
+  async testProvider(name: string): Promise<TestConnectionResponse> {
+    return this.fetch<TestConnectionResponse>(`/providers/${encodeURIComponent(name)}/test`, {
+      method: 'POST',
+    })
+  }
+}
+
+export const api = new ApiClientWithProviders()

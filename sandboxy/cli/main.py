@@ -1594,5 +1594,376 @@ def mcp_list_servers() -> None:
     click.echo("More servers: https://github.com/modelcontextprotocol/servers")
 
 
+# =============================================================================
+# PROVIDERS COMMAND GROUP
+# =============================================================================
+
+
+@main.group()
+def providers() -> None:
+    """Manage local model providers (Ollama, LM Studio, vLLM, etc.)."""
+    pass
+
+
+@providers.command("list")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def providers_list(as_json: bool) -> None:
+    """List all configured local providers.
+
+    Shows provider name, type, URL, connection status, and model count.
+
+    Examples:
+        sandboxy providers list
+        sandboxy providers list --json
+    """
+    import asyncio
+
+    from sandboxy.providers.config import load_providers_config
+    from sandboxy.providers.local import LocalProvider
+
+    config = load_providers_config()
+
+    if not config.providers:
+        if as_json:
+            click.echo(json.dumps({"providers": []}))
+        else:
+            click.echo("No local providers configured.")
+            click.echo("")
+            click.echo("Add a provider with:")
+            click.echo("  sandboxy providers add ollama --url http://localhost:11434/v1")
+        return
+
+    async def get_statuses():
+        results = []
+        for pconfig in config.providers:
+            provider = LocalProvider(pconfig)
+            try:
+                status = await provider.test_connection()
+                results.append(
+                    {
+                        "name": pconfig.name,
+                        "type": pconfig.type,
+                        "base_url": pconfig.base_url,
+                        "enabled": pconfig.enabled,
+                        "status": status.status.value,
+                        "model_count": len(status.available_models),
+                    }
+                )
+            except Exception as e:
+                results.append(
+                    {
+                        "name": pconfig.name,
+                        "type": pconfig.type,
+                        "base_url": pconfig.base_url,
+                        "enabled": pconfig.enabled,
+                        "status": "error",
+                        "model_count": 0,
+                        "error": str(e),
+                    }
+                )
+            finally:
+                await provider.close()
+        return results
+
+    statuses = asyncio.run(get_statuses())
+
+    if as_json:
+        click.echo(json.dumps({"providers": statuses}, indent=2))
+        return
+
+    # Table output
+    click.echo(f"{'NAME':<15} {'TYPE':<18} {'URL':<35} {'STATUS':<12} {'MODELS':<6}")
+    for s in statuses:
+        status_display = s["status"]
+        if s["status"] == "connected":
+            status_display = click.style("connected", fg="green")
+        elif s["status"] in ("disconnected", "error"):
+            status_display = click.style(s["status"], fg="red")
+
+        click.echo(
+            f"{s['name']:<15} {s['type']:<18} {s['base_url']:<35} {status_display:<12} {s['model_count']:<6}"
+        )
+
+
+@providers.command("add")
+@click.argument("name")
+@click.option(
+    "--type",
+    "provider_type",
+    type=click.Choice(["ollama", "lmstudio", "vllm", "openai-compatible"]),
+    default="openai-compatible",
+    help="Provider type",
+)
+@click.option("--url", required=True, help="Base URL for the provider API")
+@click.option("--api-key", help="Optional API key for authentication")
+@click.option("--model", "models", multiple=True, help="Manually specify model (can be repeated)")
+@click.option("--no-test", is_flag=True, help="Skip connection test")
+def providers_add(
+    name: str,
+    provider_type: str,
+    url: str,
+    api_key: str | None,
+    models: tuple[str, ...],
+    no_test: bool,
+) -> None:
+    """Add a new local model provider.
+
+    Examples:
+        sandboxy providers add ollama --url http://localhost:11434/v1
+        sandboxy providers add my-vllm --type vllm --url http://gpu:8000/v1 --api-key $KEY
+        sandboxy providers add custom --url http://localhost:8080/v1 --model llama3 --model mistral
+    """
+    import asyncio
+
+    from sandboxy.providers.config import (
+        LocalProviderConfig,
+        load_providers_config,
+        save_providers_config,
+    )
+    from sandboxy.providers.local import LocalProvider
+    from sandboxy.providers.registry import reload_local_providers
+
+    # Load existing config
+    config = load_providers_config()
+
+    # Check for duplicate name
+    if config.get_provider(name):
+        click.echo(f"Error: Provider '{name}' already exists", err=True)
+        sys.exit(1)
+
+    # Create provider config
+    try:
+        provider_config = LocalProviderConfig(
+            name=name,
+            type=provider_type,
+            base_url=url,
+            api_key=api_key,
+            models=list(models),
+        )
+    except ValueError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+    # Test connection unless skipped
+    discovered_models: list[str] = []
+    if not no_test:
+        click.echo(f"Testing connection to {url}...")
+
+        async def test():
+            provider = LocalProvider(provider_config)
+            try:
+                status = await provider.test_connection()
+                return status
+            finally:
+                await provider.close()
+
+        try:
+            status = asyncio.run(test())
+            if status.status.value == "connected":
+                click.echo(click.style("✓ Connected", fg="green"))
+                discovered_models = status.available_models
+                if discovered_models:
+                    click.echo(f"✓ Found {len(discovered_models)} models")
+            else:
+                click.echo(click.style(f"✗ Connection failed: {status.error_message}", fg="red"))
+                click.echo("")
+                click.echo("Provider will be added but may not work until server is running.")
+                click.echo("Use --no-test to skip this check.")
+                sys.exit(2)
+        except Exception as e:
+            click.echo(click.style(f"✗ Connection failed: {e}", fg="red"))
+            sys.exit(2)
+
+    # Add and save
+    config.add_provider(provider_config)
+    save_providers_config(config)
+
+    # Reload providers in registry
+    reload_local_providers()
+
+    click.echo(f"Added provider '{name}'")
+    if discovered_models:
+        model_list = ", ".join(discovered_models[:5])
+        if len(discovered_models) > 5:
+            model_list += f", ... ({len(discovered_models) - 5} more)"
+        click.echo(f"Found {len(discovered_models)} models: {model_list}")
+    elif models:
+        click.echo(f"Configured {len(models)} model(s): {', '.join(models)}")
+
+
+@providers.command("remove")
+@click.argument("name")
+def providers_remove(name: str) -> None:
+    """Remove a configured provider.
+
+    Examples:
+        sandboxy providers remove ollama
+    """
+    from sandboxy.providers.config import load_providers_config, save_providers_config
+    from sandboxy.providers.registry import reload_local_providers
+
+    config = load_providers_config()
+
+    if not config.remove_provider(name):
+        click.echo(f"Error: Provider '{name}' not found", err=True)
+        sys.exit(1)
+
+    save_providers_config(config)
+    reload_local_providers()
+
+    click.echo(f"Removed provider '{name}'")
+
+
+@providers.command("test")
+@click.argument("name")
+def providers_test(name: str) -> None:
+    """Test connection to a provider.
+
+    Examples:
+        sandboxy providers test ollama
+    """
+    import asyncio
+
+    from sandboxy.providers.config import load_providers_config
+    from sandboxy.providers.local import LocalProvider
+
+    config = load_providers_config()
+    provider_config = config.get_provider(name)
+
+    if not provider_config:
+        click.echo(f"Error: Provider '{name}' not found", err=True)
+        sys.exit(1)
+
+    click.echo(f"Testing connection to {name} ({provider_config.base_url})...")
+
+    async def test():
+        provider = LocalProvider(provider_config)
+        try:
+            return await provider.test_connection()
+        finally:
+            await provider.close()
+
+    try:
+        status = asyncio.run(test())
+
+        if status.status.value == "connected":
+            click.echo(click.style(f"✓ Connected in {status.latency_ms}ms", fg="green"))
+            if status.available_models:
+                click.echo(
+                    f"✓ Found {len(status.available_models)} models: {', '.join(status.available_models)}"
+                )
+        else:
+            click.echo(click.style(f"✗ Connection failed: {status.error_message}", fg="red"))
+
+            # Provide helpful suggestions based on provider type
+            if provider_config.type == "ollama":
+                click.echo("")
+                click.echo("  Suggestion: Ensure Ollama is running with: ollama serve")
+            elif provider_config.type == "vllm":
+                click.echo("")
+                click.echo(
+                    "  Suggestion: Start vLLM with: python -m vllm.entrypoints.openai.api_server"
+                )
+            elif provider_config.type == "lmstudio":
+                click.echo("")
+                click.echo("  Suggestion: Start the server in LM Studio and load a model")
+
+            sys.exit(1)
+
+    except Exception as e:
+        click.echo(click.style(f"✗ Error: {e}", fg="red"))
+        sys.exit(1)
+
+
+@providers.command("models")
+@click.argument("name", required=False)
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def providers_models(name: str | None, as_json: bool) -> None:
+    """List models from configured providers.
+
+    If NAME is provided, shows models only from that provider.
+    Otherwise, shows models from all providers.
+
+    Examples:
+        sandboxy providers models
+        sandboxy providers models ollama
+        sandboxy providers models --json
+    """
+    import asyncio
+
+    from sandboxy.providers.config import load_providers_config
+    from sandboxy.providers.local import LocalProvider
+
+    config = load_providers_config()
+
+    if name:
+        provider_config = config.get_provider(name)
+        if not provider_config:
+            click.echo(f"Error: Provider '{name}' not found", err=True)
+            sys.exit(1)
+        providers_to_check = [provider_config]
+    else:
+        providers_to_check = [p for p in config.providers if p.enabled]
+
+    if not providers_to_check:
+        if as_json:
+            click.echo(json.dumps({"models": []}))
+        else:
+            click.echo("No providers configured.")
+        return
+
+    async def get_models():
+        all_models = []
+        for pconfig in providers_to_check:
+            provider = LocalProvider(pconfig)
+            try:
+                models = await provider.refresh_models()
+                for m in models:
+                    all_models.append(
+                        {
+                            "provider": pconfig.name,
+                            "id": m.id,
+                            "name": m.name,
+                            "context_length": m.context_length,
+                            "supports_tools": m.supports_tools,
+                        }
+                    )
+            except Exception:
+                # Provider unreachable, use configured models if any
+                for model_id in pconfig.models:
+                    all_models.append(
+                        {
+                            "provider": pconfig.name,
+                            "id": model_id,
+                            "name": model_id,
+                            "context_length": 0,
+                            "supports_tools": False,
+                        }
+                    )
+            finally:
+                await provider.close()
+        return all_models
+
+    models = asyncio.run(get_models())
+
+    if as_json:
+        output = {"models": models}
+        if name:
+            output["provider"] = name
+        click.echo(json.dumps(output, indent=2))
+        return
+
+    if not models:
+        click.echo("No models found. Is the provider running?")
+        return
+
+    # Table output
+    click.echo(f"{'PROVIDER':<15} {'MODEL':<40} {'TOOLS':<6} {'CONTEXT':<10}")
+    for m in models:
+        tools = "✓" if m["supports_tools"] else "✗"
+        ctx = str(m["context_length"]) if m["context_length"] > 0 else "?"
+        click.echo(f"{m['provider']:<15} {m['id']:<40} {tools:<6} {ctx:<10}")
+
+
 if __name__ == "__main__":
     main()

@@ -292,6 +292,9 @@ class RunResult:
     cost_usd: float | None = None
     error: str | None = None
     created_at: datetime = field(default_factory=datetime.now)
+    # Provider info for distinguishing local vs cloud
+    is_local: bool = False
+    provider_name: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
@@ -324,6 +327,8 @@ class RunResult:
             "cost_usd": self.cost_usd,
             "error": self.error,
             "created_at": self.created_at.isoformat(),
+            "is_local": self.is_local,
+            "provider_name": self.provider_name,
         }
 
     def to_json(self, indent: int | None = 2) -> str:
@@ -332,9 +337,15 @@ class RunResult:
 
     def pretty(self) -> str:
         """Format for human-readable display."""
+        model_display = self.model
+        if self.is_local:
+            model_display += " (local)"
+        elif self.provider_name:
+            model_display += f" ({self.provider_name})"
+
         lines = [
             f"Scenario: {self.scenario_id}",
-            f"Model: {self.model}",
+            f"Model: {model_display}",
             f"Latency: {self.latency_ms}ms",
         ]
 
@@ -516,6 +527,10 @@ class UnifiedRunner:
             temperature=temperature,
         )
 
+        # Detect if this is a local provider
+        is_local = hasattr(provider, "config")  # LocalProvider has config attribute
+        provider_name = provider.provider_name if hasattr(provider, "provider_name") else None
+
         return RunResult(
             id="",  # Set by caller
             scenario_id=scenario.id,
@@ -528,7 +543,9 @@ class UnifiedRunner:
             ],
             input_tokens=response.input_tokens,
             output_tokens=response.output_tokens,
-            cost_usd=response.cost_usd,
+            cost_usd=response.cost_usd if not is_local else 0.0,  # Local models have no cost
+            is_local=is_local,
+            provider_name=provider_name,
         )
 
     async def _run_multi_turn(
@@ -773,6 +790,11 @@ class UnifiedRunner:
                 # Calculate cost from token counts
                 cost_usd = self._calculate_cost(model, input_tokens, output_tokens)
 
+            # Detect if this is a local provider
+            provider = self.registry.get_provider_for_model(model)
+            is_local = hasattr(provider, "config")
+            provider_name = provider.provider_name if hasattr(provider, "provider_name") else None
+
             return RunResult(
                 id="",
                 scenario_id=scenario.id,
@@ -783,7 +805,9 @@ class UnifiedRunner:
                 final_state=env_state,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
-                cost_usd=cost_usd,
+                cost_usd=cost_usd if not is_local else 0.0,
+                is_local=is_local,
+                provider_name=provider_name,
             )
 
         finally:
