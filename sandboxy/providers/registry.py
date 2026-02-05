@@ -1,11 +1,56 @@
 """Provider registry for managing multiple LLM providers."""
 
+from __future__ import annotations
+
 import logging
 import os
+from typing import TYPE_CHECKING
 
 from sandboxy.providers.base import BaseProvider, ModelInfo, ProviderError
 
+if TYPE_CHECKING:
+    from sandboxy.providers.local import LocalProvider
+
 logger = logging.getLogger(__name__)
+
+# Local providers are lazily loaded to avoid circular imports
+_local_providers: dict[str, LocalProvider] | None = None
+
+
+def _get_local_providers() -> dict[str, BaseProvider]:
+    """Load local providers from config file.
+
+    Returns:
+        Dict mapping provider name to LocalProvider instance
+
+    """
+    global _local_providers
+    if _local_providers is not None:
+        return _local_providers
+
+    _local_providers = {}
+
+    try:
+        from sandboxy.providers.config import get_enabled_providers
+        from sandboxy.providers.local import LocalProvider
+
+        for config in get_enabled_providers():
+            try:
+                _local_providers[config.name] = LocalProvider(config)
+                logger.info(f"Local provider '{config.name}' loaded from config")
+            except Exception as e:
+                logger.warning(f"Failed to load local provider '{config.name}': {e}")
+    except Exception as e:
+        logger.debug(f"Could not load local providers: {e}")
+
+    return _local_providers
+
+
+def reload_local_providers() -> None:
+    """Force reload of local providers from config file."""
+    global _local_providers
+    _local_providers = None
+    _get_local_providers()
 
 
 class ProviderRegistry:
@@ -25,9 +70,15 @@ class ProviderRegistry:
 
     """
 
-    def __init__(self):
-        """Initialize registry and detect available providers."""
+    def __init__(self, include_local: bool = True):
+        """Initialize registry and detect available providers.
+
+        Args:
+            include_local: Whether to include local providers from config
+
+        """
         self.providers: dict[str, BaseProvider] = {}
+        self._include_local = include_local
         self._init_providers()
 
     def _init_providers(self) -> None:
@@ -62,10 +113,18 @@ class ProviderRegistry:
             except ProviderError as e:
                 logger.warning(f"Failed to init Anthropic: {e}")
 
+        # Load local providers from config
+        if self._include_local:
+            local_providers = _get_local_providers()
+            for name, provider in local_providers.items():
+                self.providers[name] = provider
+                logger.info(f"Local provider '{name}' registered")
+
         if not self.providers:
             logger.warning(
                 "No providers available. Set at least one API key: "
-                "OPENROUTER_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY"
+                "OPENROUTER_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY, "
+                "or configure local providers with 'sandboxy providers add'"
             )
 
     def get_provider_for_model(self, model_id: str) -> BaseProvider:
@@ -91,15 +150,23 @@ class ProviderRegistry:
                 provider="registry",
             )
 
-        # If model has a prefix (openai/gpt-4o format), use OpenRouter
-        # This is OpenRouter's convention - direct APIs don't use prefixes
+        # If model has a prefix (provider/model format)
         if "/" in model_id:
+            provider_name, model_name = model_id.split("/", 1)
+
+            # Check for local provider first (e.g., "ollama/llama3")
+            if provider_name in self.providers:
+                provider = self.providers[provider_name]
+                # Verify it's a local provider or supports the model
+                if hasattr(provider, "config") or provider.supports_model(model_id):
+                    return provider
+
+            # OpenRouter format (e.g., "openai/gpt-4o")
             if "openrouter" in self.providers:
                 return self.providers["openrouter"]
-            # If no OpenRouter, try to extract and use direct provider
-            provider_name, model_name = model_id.split("/", 1)
+
+            # Fallback to direct provider if prefix matches
             if provider_name == "openai" and "openai" in self.providers:
-                # Note: caller should strip prefix when calling direct provider
                 return self.providers["openai"]
             if provider_name == "anthropic" and "anthropic" in self.providers:
                 return self.providers["anthropic"]
@@ -131,18 +198,32 @@ class ProviderRegistry:
     def list_all_models(self) -> list[ModelInfo]:
         """List all models from all providers.
 
-        Returns deduplicated list with direct providers preferred
-        over OpenRouter for overlapping models.
+        Returns deduplicated list with:
+        1. Local providers first (highest priority)
+        2. Direct cloud providers (OpenAI, Anthropic)
+        3. OpenRouter last (fallback)
         """
         seen_ids: set[str] = set()
         models: list[ModelInfo] = []
 
-        # Add direct provider models first (preferred)
+        # Add local provider models first (highest priority)
         for name, provider in self.providers.items():
-            if name == "openrouter":
-                continue  # Add last
+            if name in ("openrouter", "openai", "anthropic"):
+                continue
 
             for model in provider.list_models():
+                # Use provider-prefixed ID for local models
+                prefixed_id = f"{name}/{model.id}"
+                if prefixed_id not in seen_ids:
+                    seen_ids.add(prefixed_id)
+                    models.append(model)
+
+        # Add direct cloud provider models
+        for name in ("openai", "anthropic"):
+            if name not in self.providers:
+                continue
+
+            for model in self.providers[name].list_models():
                 if model.id not in seen_ids:
                     seen_ids.add(model.id)
                     models.append(model)
@@ -155,6 +236,19 @@ class ProviderRegistry:
                     models.append(model)
 
         return models
+
+    def get_local_providers(self) -> dict[str, BaseProvider]:
+        """Get all local providers.
+
+        Returns:
+            Dict of local provider name to provider instance
+
+        """
+        return {
+            name: provider
+            for name, provider in self.providers.items()
+            if hasattr(provider, "config")  # LocalProvider has config attribute
+        }
 
     def get_provider(self, provider_name: str) -> BaseProvider | None:
         """Get a specific provider by name.

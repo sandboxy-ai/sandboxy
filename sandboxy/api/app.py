@@ -58,12 +58,13 @@ def create_local_app(
     )
 
     # Local routes only
-    from sandboxy.api.routes import agents, tools
+    from sandboxy.api.routes import agents, providers, tools
     from sandboxy.api.routes import local as local_routes
 
     app.include_router(local_routes.router, prefix="/api/v1", tags=["local"])
     app.include_router(agents.router, prefix="/api/v1", tags=["agents"])
     app.include_router(tools.router, prefix="/api/v1", tags=["tools"])
+    app.include_router(providers.router, prefix="/api/v1", tags=["providers"])
 
     @app.get("/health")
     async def health_check():

@@ -16,11 +16,37 @@ MAX_RETRIES = 3
 RETRY_DELAY_BASE = 1.0  # seconds
 
 
+def _is_local_provider_model(model_id: str) -> bool:
+    """Check if a model ID refers to a local provider.
+
+    Args:
+        model_id: Model identifier
+
+    Returns:
+        True if the model is from a configured local provider
+    """
+    if "/" not in model_id:
+        return False
+
+    provider_name = model_id.split("/")[0]
+
+    # Check if this provider name matches a configured local provider
+    try:
+        from sandboxy.providers.config import load_providers_config
+
+        config = load_providers_config()
+        return any(p.name == provider_name and p.enabled for p in config.providers)
+    except Exception:
+        return False
+
+
 class LlmPromptAgent(BaseAgent):
     """Agent that uses an LLM via OpenAI-compatible API.
 
-    Supports both direct OpenAI and OpenRouter (for 400+ models).
-    Uses OpenRouter when model contains "/" (e.g., "openai/gpt-4o").
+    Supports:
+    - Local providers (Ollama, LM Studio, vLLM) when model matches configured provider
+    - OpenRouter (for 400+ cloud models)
+    - Direct OpenAI when model has no prefix
     """
 
     def __init__(self, config: AgentConfig) -> None:
@@ -31,7 +57,12 @@ class LlmPromptAgent(BaseAgent):
         """
         super().__init__(config)
         self._client: Any = None
-        self._is_openrouter = "/" in (config.model or "")
+        self._local_provider: Any = None
+
+        # Check for local provider first
+        self._is_local = _is_local_provider_model(config.model or "")
+        self._is_openrouter = not self._is_local and "/" in (config.model or "")
+
         # Token usage tracking
         self._total_input_tokens = 0
         self._total_output_tokens = 0
@@ -39,6 +70,9 @@ class LlmPromptAgent(BaseAgent):
     @property
     def api_key(self) -> str:
         """Get the appropriate API key based on model type."""
+        if self._is_local:
+            # Local providers may not need an API key, or it's in the provider config
+            return ""
         if self._is_openrouter:
             return os.getenv("OPENROUTER_API_KEY", "")
         return os.getenv("OPENAI_API_KEY", "")
@@ -49,15 +83,46 @@ class LlmPromptAgent(BaseAgent):
         if self._client is None:
             from openai import OpenAI
 
-            if self._is_openrouter:
-                logger.debug("Initializing OpenRouter client for model: %s", self.config.model)
-                self._client = OpenAI(
-                    api_key=self.api_key,
-                    base_url="https://openrouter.ai/api/v1",
-                )
-            else:
-                logger.debug("Initializing OpenAI client for model: %s", self.config.model)
-                self._client = OpenAI(api_key=self.api_key)
+            if self._is_local:
+                # Get local provider and create client pointing to it
+                provider_name = (self.config.model or "").split("/")[0]
+                from sandboxy.providers.config import load_providers_config
+
+                config = load_providers_config()
+                provider_config = config.get_provider(provider_name)
+
+                if provider_config:
+                    logger.debug(
+                        "Initializing local client for %s at %s",
+                        provider_name,
+                        provider_config.base_url,
+                    )
+                    headers = {}
+                    if provider_config.api_key:
+                        headers["Authorization"] = f"Bearer {provider_config.api_key}"
+
+                    self._client = OpenAI(
+                        api_key=provider_config.api_key or "not-needed",
+                        base_url=provider_config.base_url,
+                        default_headers=headers if headers else None,
+                    )
+                else:
+                    logger.warning(
+                        "Local provider %s not found, falling back to OpenRouter", provider_name
+                    )
+                    self._is_local = False
+                    self._is_openrouter = True
+
+            if self._client is None:  # Not set by local provider path
+                if self._is_openrouter:
+                    logger.debug("Initializing OpenRouter client for model: %s", self.config.model)
+                    self._client = OpenAI(
+                        api_key=self.api_key,
+                        base_url="https://openrouter.ai/api/v1",
+                    )
+                else:
+                    logger.debug("Initializing OpenAI client for model: %s", self.config.model)
+                    self._client = OpenAI(api_key=self.api_key)
         return self._client
 
     def step(
@@ -66,7 +131,8 @@ class LlmPromptAgent(BaseAgent):
         available_tools: list[dict[str, Any]] | None = None,
     ) -> AgentAction:
         """Process conversation and return next action using LLM."""
-        if not self.api_key:
+        # Local providers don't require an API key
+        if not self._is_local and not self.api_key:
             return self._stub_response(history)
 
         messages = self._build_messages(history)
@@ -188,8 +254,13 @@ class LlmPromptAgent(BaseAgent):
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None,
     ) -> Any:
-        """Make API call to OpenAI/OpenRouter."""
+        """Make API call to OpenAI/OpenRouter/Local provider."""
         model = self.config.model or "gpt-4o-mini"
+
+        # For local providers, strip the provider prefix (e.g., "ollama/llama3" -> "llama3")
+        if self._is_local and "/" in model:
+            model = model.split("/", 1)[1]
+
         kwargs: dict[str, Any] = {
             "model": model,
             "messages": messages,
