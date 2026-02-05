@@ -636,6 +636,8 @@ async def compare_models(request: CompareModelsRequest) -> CompareModelsResponse
                     exporter.export(
                         result=result.to_dict(),
                         scenario_path=scenario_path,
+                        scenario_name=spec.name,
+                        scenario_id=spec.id,
                         agent_name=result.model,
                     )
             except ImportError:

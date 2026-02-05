@@ -163,6 +163,7 @@ class MLflowExporter:
         scenario_id: str,
         agent_name: str = "default",
         dataset_case: str | None = None,
+        run_name: str | None = None,
     ) -> str | None:
         """Export run result to MLflow (creates a new run).
 
@@ -176,6 +177,7 @@ class MLflowExporter:
             scenario_id: Unique scenario identifier
             agent_name: Agent configuration name
             dataset_case: Optional dataset case identifier
+            run_name: Optional run name (defaults to "scenario_name - agent_name")
 
         Returns:
             MLflow run ID on success, None on failure
@@ -196,8 +198,12 @@ class MLflowExporter:
             if not self._setup_tracking():
                 return None
 
+            # Generate run name if not provided
+            if run_name is None:
+                run_name = f"{scenario_name} - {agent_name}"
+
             # Start run and log everything
-            with mlflow.start_run() as run:
+            with mlflow.start_run(run_name=run_name) as run:
                 run_id = run.info.run_id
 
                 self._log_parameters(result, scenario_name, scenario_id)
