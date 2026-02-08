@@ -38,6 +38,7 @@ class CacheBustedStaticFiles(StaticFiles):
 
         return response
 
+
 logger = logging.getLogger(__name__)
 
 
