@@ -14,6 +14,29 @@ setup_logging()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
+from starlette.types import Scope
+
+
+class CacheBustedStaticFiles(StaticFiles):
+    """StaticFiles with proper cache headers for cache busting.
+
+    - index.html: no-cache (always revalidate)
+    - Hashed assets (*.js, *.css): 1 year cache (hash changes on content change)
+    """
+
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        """Get response with appropriate cache headers."""
+        response = await super().get_response(path, scope)
+
+        # HTML files: always revalidate
+        if path.endswith(".html") or path == "." or path == "":
+            response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        # Hashed assets: cache for 1 year (immutable)
+        elif "/assets/" in path or path.startswith("assets/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+
+        return response
 
 logger = logging.getLogger(__name__)
 
@@ -83,8 +106,12 @@ def create_local_app(
     async def health_check():
         return {"status": "ok", "mode": "local"}
 
-    # Serve local UI if available
+    # Serve local UI if available (with cache busting headers)
     if local_ui_path and local_ui_path.exists():
-        app.mount("/", StaticFiles(directory=str(local_ui_path), html=True), name="local-ui")
+        app.mount(
+            "/",
+            CacheBustedStaticFiles(directory=str(local_ui_path), html=True),
+            name="local-ui",
+        )
 
     return app

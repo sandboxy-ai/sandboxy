@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
-from sandboxy.agents.base import Agent, AgentAction
+from sandboxy.agents.base import Agent, AgentAction, AgentConfig
 from sandboxy.core.state import (
     EvaluationResult,
     Message,
@@ -72,6 +72,11 @@ class AsyncRunner:
         self.state = SessionState.IDLE
         self._user_input_future: asyncio.Future[str] | None = None
         self._step_index = 0
+
+        # Multi-AI participants config: {participant_id: {name, system_prompt, color, avatar}}
+        self.participants: dict[str, dict[str, Any]] = {}
+        # Per-participant agents created on demand
+        self._participant_agents: dict[str, Agent] = {}
 
     @property
     def session_state(self) -> SessionState:
@@ -153,9 +158,16 @@ class AsyncRunner:
 
                 elif step.action == StepAction.AWAIT_AGENT.value:
                     self.state = SessionState.AWAITING_AGENT
-                    async for event in self._handle_await_agent(step):
-                        self.events.append(event)
-                        yield event
+                    # Route to multi-participant handler if step specifies participants
+                    step_participants = step.params.get("participants", [])
+                    if step_participants and self.participants:
+                        async for event in self._handle_multi_agent(step, step_participants):
+                            self.events.append(event)
+                            yield event
+                    else:
+                        async for event in self._handle_await_agent(step):
+                            self.events.append(event)
+                            yield event
                     self.state = SessionState.RUNNING
 
                 elif step.action == StepAction.BRANCH.value:
@@ -296,6 +308,104 @@ class AsyncRunner:
                     payload={"step_id": step.id},
                 )
                 return
+
+    def _get_participant_agent(self, participant_id: str) -> Agent:
+        """Get or create an agent for a specific participant.
+
+        Creates a clone of the base agent with the participant's system prompt.
+        """
+        if participant_id in self._participant_agents:
+            return self._participant_agents[participant_id]
+
+        participant = self.participants.get(participant_id)
+        if not participant:
+            logger.warning(f"Unknown participant: {participant_id}, using default agent")
+            return self.agent
+
+        # Clone the base agent's config with the participant's system prompt
+        new_config = AgentConfig(
+            id=f"{self.agent.config.id}_{participant_id}",
+            name=participant.get("name", participant_id),
+            kind=self.agent.config.kind,
+            model=self.agent.config.model,
+            system_prompt=participant.get("system_prompt", ""),
+            tools=list(self.agent.config.tools),
+            params=dict(self.agent.config.params),
+            impl=dict(self.agent.config.impl),
+        )
+
+        from sandboxy.agents.loader import create_agent_from_config
+
+        agent = create_agent_from_config(new_config)
+        self._participant_agents[participant_id] = agent
+        return agent
+
+    async def _handle_multi_agent(
+        self, step: Step, participant_ids: list[str]
+    ) -> AsyncGenerator[RunEvent, None]:
+        """Handle await_agent with multiple participants.
+
+        Calls each participant's agent sequentially, yielding events with
+        participant metadata in the payload.
+        """
+        for pid in participant_ids:
+            participant = self.participants.get(pid, {})
+            agent = self._get_participant_agent(pid)
+
+            # Build participant metadata for events
+            participant_meta = {
+                "participant_id": pid,
+                "participant_name": participant.get("name", pid),
+                "participant_color": participant.get("color", "#6B7280"),
+                "participant_avatar": participant.get("avatar", ""),
+            }
+
+            tool_schemas = self._get_tool_schemas()
+            action: AgentAction = agent.step(self.history, tool_schemas)
+
+            if action.type == "message":
+                content = action.content or ""
+                # Add to shared history with participant prefix for context
+                name = participant.get("name", pid)
+                msg = Message(role="assistant", content=f"**{name}:** {content}")
+                self.history.append(msg)
+
+                yield RunEvent(
+                    type="agent",
+                    payload={
+                        "content": content,
+                        "step_id": step.id,
+                        **participant_meta,
+                    },
+                )
+            elif action.type == "tool_call":
+                # Handle tool calls for this participant
+                async for event in self._handle_tool_call(action, step):
+                    # Attach participant metadata to tool events
+                    event.payload.update(participant_meta)
+                    yield event
+
+                # After tool call, get the agent's response
+                action = agent.step(self.history, tool_schemas)
+                if action.type == "message":
+                    content = action.content or ""
+                    name = participant.get("name", pid)
+                    msg = Message(role="assistant", content=f"**{name}:** {content}")
+                    self.history.append(msg)
+
+                    yield RunEvent(
+                        type="agent",
+                        payload={
+                            "content": content,
+                            "step_id": step.id,
+                            **participant_meta,
+                        },
+                    )
+            elif action.type == "stop":
+                yield RunEvent(
+                    type="agent_stop",
+                    payload={"step_id": step.id, **participant_meta},
+                )
 
     async def _handle_tool_call(
         self, action: AgentAction, step: Step

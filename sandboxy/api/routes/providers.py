@@ -116,6 +116,16 @@ class ErrorDetail(BaseModel):
     details: dict[str, Any] | None = None
 
 
+# --- Helpers ---
+
+
+def _redact_config(config: LocalProviderConfig) -> dict[str, Any]:
+    """Return a config dict with the api_key excluded."""
+    data = config.model_dump(exclude={"api_key"})
+    data["has_api_key"] = config.api_key is not None
+    return data
+
+
 # --- Routes ---
 
 
@@ -238,7 +248,7 @@ async def get_provider(name: str) -> ProviderDetailResponse:
         await provider.close()
 
     return ProviderDetailResponse(
-        config=provider_config.model_dump(),
+        config=_redact_config(provider_config),
         status=ProviderStatusResponse(
             status=conn_status.status,
             last_checked=conn_status.last_checked.isoformat() if conn_status.last_checked else None,
@@ -304,7 +314,7 @@ async def update_provider(name: str, request: UpdateProviderRequest) -> dict:
     save_providers_config(config)
     reload_local_providers()
 
-    return updated.model_dump()
+    return _redact_config(updated)
 
 
 @router.post("/{name}/test", response_model=TestConnectionResponse)

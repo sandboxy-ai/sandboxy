@@ -34,6 +34,7 @@ class ModelResponse:
     output_tokens: int
     cost_usd: float | None = None
     finish_reason: str | None = None
+    tool_calls: list[dict[str, Any]] | None = None
     raw_response: dict[str, Any] | None = field(default=None, repr=False)
 
 
@@ -64,6 +65,7 @@ class BaseProvider(ABC):
         messages: list[dict[str, Any]],
         temperature: float = 0.7,
         max_tokens: int = 1024,
+        tools: list[dict[str, Any]] | None = None,
         **kwargs: Any,
     ) -> ModelResponse:
         """Send a completion request to the model.
@@ -73,6 +75,7 @@ class BaseProvider(ABC):
             messages: List of message dicts with 'role' and 'content'
             temperature: Sampling temperature (0-2)
             max_tokens: Maximum tokens in response
+            tools: Optional list of tool definitions in OpenAI function-calling format
             **kwargs: Provider-specific options
 
         Returns:

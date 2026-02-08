@@ -828,18 +828,22 @@ class OpenRouterProvider(BaseProvider):
         messages: list[dict[str, Any]],
         temperature: float = 0.7,
         max_tokens: int = 1024,
+        tools: list[dict[str, Any]] | None = None,
         **kwargs: Any,
     ) -> ModelResponse:
         """Send completion request via OpenRouter."""
         start_time = time.time()
 
-        payload = {
+        payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
             **kwargs,
         }
+
+        if tools:
+            payload["tools"] = tools
 
         async with httpx.AsyncClient(timeout=120.0) as client:
             try:
@@ -876,14 +880,28 @@ class OpenRouterProvider(BaseProvider):
         output_tokens = usage.get("completion_tokens", 0)
         cost = self._calculate_cost(model, input_tokens, output_tokens)
 
+        # Extract tool calls if present
+        tool_calls_raw = message.get("tool_calls")
+        tool_calls = None
+        if tool_calls_raw:
+            tool_calls = [
+                {
+                    "id": tc.get("id", ""),
+                    "type": tc.get("type", "function"),
+                    "function": tc.get("function", {}),
+                }
+                for tc in tool_calls_raw
+            ]
+
         return ModelResponse(
-            content=message.get("content", ""),
+            content=message.get("content") or "",
             model_id=data.get("model", model),
             latency_ms=latency_ms,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cost_usd=cost,
             finish_reason=choice.get("finish_reason"),
+            tool_calls=tool_calls,
             raw_response=data,
         )
 
